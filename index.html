@@ -372,7 +372,7 @@
 </div>
 
 <script>
-// 雲端儲存 API
+// 儲存 API
 class CloudStorage {
   constructor() {
     this.endpoint = 'https://api.jsonbin.io/v3/b';
@@ -491,33 +491,15 @@ const editTitleInput = document.getElementById('edit-title');
 const addClassModal = document.getElementById('add-class-modal');
 const newClassNameInput = document.getElementById('new-class-name');
 
-// 同步狀態管理
-function updateSyncStatus(status) {
-  const syncStatus = document.getElementById('sync-status');
-  syncStatus.className = `sync-status sync-${status}`;
-  
-  switch(status) {
-    case 'online':
-      syncStatus.innerHTML = '● 雲端已同步';
-      break;
-    case 'syncing':
-      syncStatus.innerHTML = '<div class="loading"></div> 同步中...';
-      break;
-    case 'offline':
-      syncStatus.innerHTML = '● 離線模式';
-      break;
-  }
-}
-
 // 跨設備同步監聽
 function setupCrossDeviceSync() {
   if (typeof BroadcastChannel !== 'undefined') {
     const channel = new BroadcastChannel('homework_sync');
     channel.onmessage = (event) => {
       if (event.data.type === 'data_update' && event.data.username === currentUser) {
+        // 靜默重新載入資料
         loadUserData();
         render();
-        showStatus('資料已從其他設備同步');
       }
     };
   }
