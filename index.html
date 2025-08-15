@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>作業紀錄系統</title>
+<style>
+  body { 
+    font-family: sans-serif; 
+    padding: 0; 
+    margin: 0;
+    min-height: 100vh;
+  }
+  
+  .login-page {
+    background: white;
+    min-height: 100vh;
+  }
+  
+  .main-app {
+    background: white;
+    min-height: 100vh;
+    padding: 20px 0;
+  }
+  
+  .main-content {
+    background: white;
+    max-width: 800px;
+    margin: 0 auto;
+    min-height: calc(100vh - 40px);
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  
+  /* 手機響應式設計 */
+  @media (max-width: 768px) {
+    .main-app {
+      padding: 10px 0;
+    }
+    
+    .main-content {
+      max-width: 100%;
+      margin: 0;
+      min-height: calc(100vh - 20px);
+      padding: 15px;
+    }
+    
+    .grid {
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+    }
+    
+    button {
+      padding: 10px 8px;
+      font-size: 14px;
+    }
+    
+    input {
+      padding: 12px;
+      font-size: 16px;
+    }
+    
+    .modal-content {
+      width: 95%;
+      margin: 10px;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    .grid {
+      grid-template-columns: repeat(5, 1fr);
+    }
+    
+    .main-content {
+      padding: 10px;
+    }
+  }
+  
+  .active { background: #3b82f6; color: #fff; }
+  button { cursor: pointer; margin: 2px; }
+  .grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; margin-bottom: 10px; }
+  .inline-input { width: 100px; }
+  
+  /* 登入頁面樣式 */
+  .login-container {
+    max-width: 400px;
+    margin: 100px auto;
+    padding: 30px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    text-align: center;
+    background: white;
+  }
+  
+  .login-form input {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+  }
+  
+  .login-form button {
+    width: 100%;
+    padding: 12px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+  }
+  
+  .login-form button:hover {
+    background: #2563eb;
+  }
+  
+  .tab-buttons {
+    display: flex;
+    margin-bottom: 20px;
+  }
+  
+  .tab-button {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ddd;
+    background: #f5f5f5;
+    cursor: pointer;
+  }
+  
+  .tab-button.active {
+    background: #3b82f6;
+    color: white;
+  }
+  
+  .user-info {
+    float: right;
+    margin-bottom: 20px;
+  }
+  
+  .logout-btn {
+    background: #dc2626;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    margin-left: 10px;
+  }
+  
+  .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  
+  .modal-content {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80%;
+    overflow-y: auto;
+  }
+  
+  .modal-buttons {
+    text-align: center;
+    margin-top: 15px;
+  }
+  
+  .modal-buttons button {
+    margin: 5px;
+    padding: 8px 16px;
+  }
+  
+  .hidden { display: none; }
+  
+  .status-message {
+    padding: 8px;
+    margin: 10px 0;
+    border-radius: 4px;
+    text-align: center;
+  }
+  
+  .success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+  }
+  
+  .error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+  }
+</style>
+</head>
+<body>
+
+<!-- 登入頁面 -->
+<div id="login-page" class="login-container login-page">
+  <h2>作業紀錄系統</h2>
+  
+  <div class="tab-buttons">
+    <div class="tab-button active" onclick="switchTab('login')">登入</div>
+    <div class="tab-button" onclick="switchTab('register')">註冊</div>
+  </div>
+  
+  <!-- 登入表單 -->
+  <div id="login-form" class="login-form">
+    <input type="text" id="login-username" placeholder="使用者名稱" required>
+    <input type="password" id="login-password" placeholder="密碼" required>
+    <button onclick="login()">登入</button>
+  </div>
+  
+  <!-- 註冊表單 -->
+  <div id="register-form" class="login-form hidden">
+    <input type="text" id="register-username" placeholder="使用者名稱" required>
+    <input type="password" id="register-password" placeholder="密碼" required>
+    <input type="password" id="register-confirm" placeholder="確認密碼" required>
+    <button onclick="register()">註冊</button>
+  </div>
+  
+  <div id="auth-message"></div>
+</div>
+
+<!-- 主應用程式 -->
+<div id="main-app" class="main-app hidden">
+  <div class="main-content">
+    <div class="user-info">
+      歡迎，<span id="current-user"></span>
+      <span id="admin-badge" class="hidden" style="color: #dc2626; font-weight: bold; margin-left: 10px;">管理員</span>
+      <button class="logout-btn" onclick="logout()">登出</button>
+    </div>
+    
+    <div style="clear: both;"></div>
+    
+    <h1>作業紀錄</h1>
+    <div id="class-buttons"></div>
+    <button id="add-class">+ 新增班級</button>
+    <button id="delete-class">刪除班級</button>
+    <hr>
+    <input id="title" placeholder="輸入作業標題">
+    <div id="numbers" class="grid"></div>
+    <button id="add-task">新增作業</button>
+    <hr>
+    <button id="sort-new">新 → 舊</button>
+    <button id="sort-old">舊 → 新</button>
+    <div id="tasks"></div>
+    <div id="status-message"></div>
+    
+    <!-- 管理員功能 -->
+    <div id="admin-panel" class="hidden" style="margin-top: 30px; padding: 15px; border: 2px solid #dc2626; border-radius: 8px;">
+      <h3 style="color: #dc2626;">管理員功能</h3>
+      <button onclick="showAllUsers()" style="background: #dc2626; color: white; margin: 5px;">查看所有用戶</button>
+      <button onclick="exportAllData()" style="background: #dc2626; color: white; margin: 5px;">匯出全部資料</button>
+      <div id="admin-info"></div>
+    </div>
+  </div>
+  
+  <!-- 新增班級彈出窗 -->
+  <div id="add-class-modal" class="modal hidden">
+    <div class="modal-content">
+      <h3>新增班級</h3>
+      <p>輸入班級名稱：</p>
+      <input type="text" id="new-class-name" style="width: 100%; padding: 8px; margin-bottom: 15px;">
+      <div class="modal-buttons">
+        <button onclick="saveNewClass()">確定</button>
+        <button onclick="cancelNewClass()">取消</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 編輯作業彈出窗 -->
+  <div id="edit-modal" class="modal hidden">
+    <div class="modal-content">
+      <h3>編輯作業</h3>
+      <p>作業標題：</p>
+      <input type="text" id="edit-title" style="width: 100%; padding: 8px; margin-bottom: 15px;">
+      <p>選擇沒交作業的座號：</p>
+      <div id="edit-numbers" class="grid"></div>
+      <div class="modal-buttons">
+        <button onclick="saveEditTask()">確定</button>
+        <button onclick="cancelEditTask()">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 用戶管理系統 - 使用 localStorage
+let users = {};
+let currentUser = null;
+
+// 應用程式資料
+let classes = [];
+let activeClassId = null;
+let sortOrder = 'new';
+
+// DOM 元素
+const loginPage = document.getElementById('login-page');
+const mainApp = document.getElementById('main-app');
+const currentUserSpan = document.getElementById('current-user');
+const classButtons = document.getElementById('class-buttons');
+const titleInput = document.getElementById('title');
+const numbersDiv = document.getElementById('numbers');
+const tasksDiv = document.getElementById('tasks');
+const statusMessage = document.getElementById('status-message');
+const selectedNumbers = new Set();
+
+// 管理員相關
+const adminBadge = document.getElementById('admin-badge');
+const adminPanel = document.getElementById('admin-panel');
+const adminUsers = ['admin']; // 管理員用戶名列表
+
+// 編輯模式相關變數
+let editingTaskId = null;
+const editSelectedNumbers = new Set();
+const editModal = document.getElementById('edit-modal');
+const editNumbersDiv = document.getElementById('edit-numbers');
+const editTitleInput = document.getElementById('edit-title');
+
+// 新增班級相關變數
+const addClassModal = document.getElementById('add-class-modal');
+const newClassNameInput = document.getElementById('new-class-name');
+
+// 初始化 - 使用 localStorage
+function initApp() {
+  const storedUsers = localStorage.getItem('homework_users');
+  if (storedUsers) {
+    users = JSON.parse(storedUsers);
+  }
+  
+  const storedCurrentUser = localStorage.getItem('homework_current_user');
+  if (storedCurrentUser) {
+    currentUser = storedCurrentUser;
+    loadUserData();
+    showMainApp();
+  }
+}
+
+// 保存用戶資料
+function saveUsers() {
+  localStorage.setItem('homework_users', JSON.stringify(users));
+}
+
+// 保存當前用戶資料
+function save() {
+  if (currentUser && users[currentUser]) {
+    users[currentUser].classes = classes;
+    users[currentUser].activeClassId = activeClassId;
+    users[currentUser].sortOrder = sortOrder;
+    saveUsers();
+  }
+}
+
+// 載入當前用戶資料
+function loadUserData() {
+  if (currentUser && users[currentUser]) {
+    const userData = users[currentUser];
+    classes = userData.classes || [{ id: Date.now(), name: '班級一', tasks: [] }];
+    activeClassId = userData.activeClassId || classes[0].id;
+    sortOrder = userData.sortOrder || 'new';
+  } else {
+    classes = [{ id: Date.now(), name: '班級一', tasks: [] }];
+    activeClassId = classes[0].id;
+    sortOrder = 'new';
+  }
+}
+
+// 切換登入/註冊頁籤
+function switchTab(tab) {
+  const loginForm = document.getElementById('login-form');
+  const registerForm = document.getElementById('register-form');
+  const tabButtons = document.querySelectorAll('.tab-button');
+  
+  tabButtons.forEach(btn => btn.classList.remove('active'));
+  
+  if (tab === 'login') {
+    loginForm.classList.remove('hidden');
+    registerForm.classList.add('hidden');
+    tabButtons[0].classList.add('active');
+  } else {
+    loginForm.classList.add('hidden');
+    registerForm.classList.remove('hidden');
+    tabButtons[1].classList.add('active');
+  }
+  
+  clearAuthMessage();
+}
+
+// 顯示認證訊息
+function showAuthMessage(message, isError = false) {
+  const authMessage = document.getElementById('auth-message');
+  authMessage.innerHTML = `<div class="status-message ${isError ? 'error' : 'success'}">${message}</div>`;
+  setTimeout(() => {
+    authMessage.innerHTML = '';
+  }, 3000);
+}
+
+// 清除認證訊息
+function clearAuthMessage() {
+  document.getElementById('auth-message').innerHTML = '';
+}
+
+// 顯示狀態訊息
+function showStatus(message, isError = false) {
+  statusMessage.innerHTML = `<div class="status-message ${isError ? 'error' : 'success'}">${message}</div>`;
+  setTimeout(() => {
+    statusMessage.innerHTML = '';
+  }, 3000);
+}
+
+// 註冊功能
+function register() {
+  const username = document.getElementById('register-username').value.trim();
+  const password = document.getElementById('register-password').value;
+  const confirmPassword = document.getElementById('register-confirm').value;
+  
+  if (!username || !password) {
+    showAuthMessage('請填寫所有欄位', true);
+    return;
+  }
+  
+  if (password !== confirmPassword) {
+    showAuthMessage('密碼與確認密碼不符', true);
+    return;
+  }
+  
+  if (users[username]) {
+    showAuthMessage('用戶名稱已存在', true);
+    return;
+  }
+  
+  users[username] = {
+    password: password,
+    classes: [{ id: Date.now(), name: '班級一', tasks: [] }],
+    activeClassId: null,
+    sortOrder: 'new'
+  };
+  users[username].activeClassId = users[username].classes[0].id;
+  
+  saveUsers();
+  showAuthMessage('註冊成功！請登入');
+  
+  document.getElementById('register-username').value = '';
+  document.getElementById('register-password').value = '';
+  document.getElementById('register-confirm').value = '';
+  setTimeout(() => switchTab('login'), 1500);
+}
+
+// 登入功能
+function login() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  
+  if (!username || !password) {
+    showAuthMessage('請填寫用戶名稱和密碼', true);
+    return;
+  }
+  
+  if (!users[username] || users[username].password !== password) {
+    showAuthMessage('用戶名稱或密碼錯誤', true);
+    return;
+  }
+  
+  currentUser = username;
+  localStorage.setItem('homework_current_user', currentUser);
+  loadUserData();
+  showMainApp();
+}
+
+// 登出功能
+function logout() {
+  save();
+  currentUser = null;
+  localStorage.removeItem('homework_current_user');
+  classes = [];
+  activeClassId = null;
+  selectedNumbers.clear();
+  
+  document.getElementById('login-username').value = '';
+  document.getElementById('login-password').value = '';
+  
+  showLoginPage();
+}
+
+// 顯示主應用程式
+function showMainApp() {
+  loginPage.classList.add('hidden');
+  mainApp.classList.remove('hidden');
+  currentUserSpan.textContent = currentUser;
+  
+  // 檢查管理員身分
+  if (adminUsers.includes(currentUser)) {
+    adminBadge.classList.remove('hidden');
+    adminPanel.classList.remove('hidden');
+  } else {
+    adminBadge.classList.add('hidden');
+    adminPanel.classList.add('hidden');
+  }
+  
+  setupEventListeners();
+  render();
+}
+
+// 顯示登入頁面
+function showLoginPage() {
+  mainApp.classList.add('hidden');
+  loginPage.classList.remove('hidden');
+  clearAuthMessage();
+}
+
+// 設置事件監聽器
+function setupEventListeners() {
+  const addClassBtn = document.getElementById('add-class');
+  const deleteClassBtn = document.getElementById('delete-class');
+  const addTaskBtn = document.getElementById('add-task');
+  const sortNewBtn = document.getElementById('sort-new');
+  const sortOldBtn = document.getElementById('sort-old');
+  
+  if (addClassBtn) {
+    addClassBtn.onclick = () => {
+      openAddClassModal();
+    };
+  }
+
+  if (deleteClassBtn) {
+    deleteClassBtn.onclick = () => {
+      if (classes.length <= 1) {
+        showStatus('至少需要保留一個班級', true);
+        return;
+      }
+      
+      const deletedClass = classes.find(c => c.id === activeClassId);
+      classes = classes.filter(c => c.id !== activeClassId);
+      activeClassId = classes[0].id;
+      selectedNumbers.clear();
+      render();
+      showStatus(`已刪除班級：${deletedClass.name}`);
+    };
+  }
+
+  if (addTaskBtn) {
+    addTaskBtn.onclick = () => {
+      const title = titleInput.value.trim();
+      if (!title) {
+        showStatus('請輸入作業標題', true);
+        return;
+      }
+      
+      const cls = classes.find(c => c.id === activeClassId);
+      cls.tasks.unshift({ id: Date.now(), title, numbers: [...selectedNumbers] });
+      titleInput.value = '';
+      selectedNumbers.clear();
+      render();
+      showStatus('作業已新增');
+    };
+  }
+
+  if (sortNewBtn) {
+    sortNewBtn.onclick = () => { 
+      sortOrder = 'new'; 
+      renderTasks(); 
+    };
+  }
+  
+  if (sortOldBtn) {
+    sortOldBtn.onclick = () => { 
+      sortOrder = 'old'; 
+      renderTasks(); 
+    };
+  }
+}
+
+// 開啟新增班級彈出窗
+function openAddClassModal() {
+  newClassNameInput.value = '';
+  addClassModal.classList.remove('hidden');
+  newClassNameInput.focus();
+}
+
+// 保存新班級
+function saveNewClass() {
+  const name = newClassNameInput.value.trim();
+  if (!name) {
+    showStatus('請輸入班級名稱', true);
+    newClassNameInput.focus();
+    return;
+  }
+  
+  const existingNames = classes.map(c => c.name);
+  if (existingNames.includes(name)) {
+    showStatus('班級名稱已存在', true);
+    newClassNameInput.focus();
+    return;
+  }
+  
+  const newClass = { id: Date.now(), name: name, tasks: [] };
+  classes.push(newClass);
+  activeClassId = newClass.id;
+  selectedNumbers.clear();
+  render();
+  showStatus(`已新增班級：${name}`);
+  
+  addClassModal.classList.add('hidden');
+}
+
+// 取消新增班級
+function cancelNewClass() {
+  addClassModal.classList.add('hidden');
+}
+
+// 渲染班級按鈕
+function renderClasses() {
+  classButtons.innerHTML = '';
+  classes.forEach(c => {
+    const btn = document.createElement('button');
+    btn.textContent = c.name;
+    btn.style.margin = '2px';
+    btn.style.padding = '8px 12px';
+    
+    if (c.id === activeClassId) {
+      btn.classList.add('active');
+    }
+    
+    btn.onclick = () => { 
+      activeClassId = c.id; 
+      selectedNumbers.clear();
+      render(); 
+    };
+    
+    classButtons.appendChild(btn);
+  });
+}
+
+// 渲染座號選擇器
+function renderNumbers() {
+  numbersDiv.innerHTML = '';
+  for (let i = 1; i <= 40; i++) {
+    const btn = document.createElement('button');
+    btn.textContent = i;
+    if (selectedNumbers.has(i)) btn.style.background = '#fca5a5';
+    btn.onclick = () => { 
+      selectedNumbers.has(i) ? selectedNumbers.delete(i) : selectedNumbers.add(i); 
+      renderNumbers(); 
+    };
+    numbersDiv.appendChild(btn);
+  }
+}
+
+// 渲染編輯模式的座號選擇器
+function renderEditNumbers() {
+  editNumbersDiv.innerHTML = '';
+  for (let i = 1; i <= 40; i++) {
+    const btn = document.createElement('button');
+    btn.textContent = i;
+    if (editSelectedNumbers.has(i)) {
+      btn.style.background = '#fca5a5';
+    }
+    btn.onclick = () => { 
+      editSelectedNumbers.has(i) ? editSelectedNumbers.delete(i) : editSelectedNumbers.add(i); 
+      renderEditNumbers(); 
+    };
+    editNumbersDiv.appendChild(btn);
+  }
+}
+
+// 渲染作業列表
+function renderTasks() {
+  const cls = classes.find(c => c.id === activeClassId);
+  if (!cls) return;
+  
+  let tasks = [...cls.tasks];
+  tasks.sort((a,b) => sortOrder==='new'?b.id-a.id:a.id-b.id);
+  tasksDiv.innerHTML = tasks.map(t => `
+    <div style='border:1px solid #ccc; padding:10px; margin:5px;'>
+      <div style='font-weight: bold; margin-bottom: 8px;'>${t.title}</div>
+      <p>沒交：${t.numbers.join(', ')||'無'}</p>
+      <button onclick="editTask(${t.id})">編輯</button>
+      <button onclick="deleteTask(${t.id})">刪除</button>
+    </div>`).join('');
+}
+
+// 主要渲染函數
+function render() { 
+  renderClasses(); 
+  renderNumbers(); 
+  renderTasks(); 
+  save(); 
+}
+
+// 開啟編輯作業彈出窗
+function openEditModal(taskId) {
+  const cls = classes.find(c => c.id === activeClassId);
+  if (!cls) return;
+  
+  const task = cls.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  
+  editingTaskId = taskId;
+  editSelectedNumbers.clear();
+  
+  editTitleInput.value = task.title;
+  task.numbers.forEach(num => editSelectedNumbers.add(num));
+  
+  renderEditNumbers();
+  editModal.classList.remove('hidden');
+  editTitleInput.focus();
+}
+
+// 保存編輯的作業
+function saveEditTask() {
+  if (editingTaskId === null) return;
+  
+  const cls = classes.find(c => c.id === activeClassId);
+  if (!cls) return;
+  
+  const task = cls.tasks.find(t => t.id === editingTaskId);
+  if (!task) return;
+  
+  const newTitle = editTitleInput.value.trim();
+  if (!newTitle) {
+    showStatus('請輸入作業標題', true);
+    editTitleInput.focus();
+    return;
+  }
+  
+  task.title = newTitle;
+  task.numbers = [...editSelectedNumbers].sort((a,b) => a-b);
+  
+  save();
+  renderTasks();
+  showStatus('作業已更新');
+  
+  editModal.classList.add('hidden');
+  editingTaskId = null;
+  editSelectedNumbers.clear();
+}
+
+// 取消編輯
+function cancelEditTask() {
+  editModal.classList.add('hidden');
+  editingTaskId = null;
+  editSelectedNumbers.clear();
+}
+
+// 編輯作業
+window.editTask = (id) => {
+  openEditModal(id);
+};
+
+// 管理員功能：查看所有用戶
+function showAllUsers() {
+  const adminInfo = document.getElementById('admin-info');
+  const userList = Object.keys(users).map(username => {
+    const userData = users[username];
+    const classCount = userData.classes ? userData.classes.length : 0;
+    const taskCount = userData.classes ? userData.classes.reduce((total, cls) => total + cls.tasks.length, 0) : 0;
+    return `${username}: ${classCount}個班級, ${taskCount}個作業`;
+  });
+  
+  adminInfo.innerHTML = `
+    <h4>所有用戶 (${Object.keys(users).length}人):</h4>
+    <div style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 200px; overflow-y: auto;">
+      ${userList.map(info => `<div>${info}</div>`).join('')}
+    </div>
+  `;
+}
+
+// 管理員功能：匯出全部資料
+function exportAllData() {
+  const allData = {
+    exportTime: new Date().toISOString(),
+    totalUsers: Object.keys(users).length,
+    users: users
+  };
+  
+  const dataStr = JSON.stringify(allData, null, 2);
+  const dataBlob = new Blob([dataStr], {type: 'application/json'});
+  const url = URL.createObjectURL(dataBlob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `全部用戶資料_${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  showStatus('全部資料已匯出');
+}
+
+// 刪除作業
+window.deleteTask = (id) => {
+  const cls = classes.find(c=>c.id===activeClassId);
+  const task = cls.tasks.find(t=>t.id===id);
+  cls.tasks = cls.tasks.filter(t=>t.id!==id);
+  render();
+  showStatus(`已刪除作業：${task.title}`);
+};
+
+// 點擊模態背景關閉
+editModal.onclick = (e) => {
+  if (e.target === editModal) {
+    cancelEditTask();
+  }
+};
+
+addClassModal.onclick = (e) => {
+  if (e.target === addClassModal) {
+    cancelNewClass();
+  }
+};
+
+// ESC 鍵關閉模態
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (!editModal.classList.contains('hidden')) {
+      cancelEditTask();
+    }
+    if (!addClassModal.classList.contains('hidden')) {
+      cancelNewClass();
+    }
+  }
+});
+
+// Enter 鍵在編輯標題時確認
+editTitleInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    saveEditTask();
+  }
+});
+
+// Enter 鍵在新增班級時確認
+newClassNameInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    saveNewClass();
+  }
+});
+
+// Enter 鍵支援
+document.getElementById('login-password').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') login();
+});
+
+document.getElementById('register-confirm').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') register();
+});
+
+document.getElementById('title').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') document.getElementById('add-task').click();
+});
+
+// 初始化
+initApp();
+</script>
+</body>
+</html>
