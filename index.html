@@ -381,10 +381,7 @@ class CloudStorage {
   }
 
   async saveData(username, userData) {
-    // 避免重複同步狀態更新
-    if (currentSyncStatus !== 'syncing') {
-      updateSyncStatus('syncing');
-    }
+    updateSyncStatus('syncing');
     
     try {
       // 模擬雲端儲存 - 實際上使用增強的 localStorage
@@ -398,8 +395,8 @@ class CloudStorage {
       // 保存到本地
       localStorage.setItem(cloudKey, JSON.stringify(dataWithTimestamp));
       
-      // 減少網路延遲模擬
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // 模擬網路延遲
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // 模擬跨設備同步 - 使用 BroadcastChannel
       if (typeof BroadcastChannel !== 'undefined') {
@@ -421,26 +418,16 @@ class CloudStorage {
   }
 
   async loadData(username) {
-    // 載入資料時不顯示同步狀態，除非是首次載入
-    const isFirstLoad = currentSyncStatus === 'offline';
-    
-    if (isFirstLoad) {
-      updateSyncStatus('syncing');
-    }
+    updateSyncStatus('syncing');
     
     try {
-      // 減少網路延遲模擬
-      if (isFirstLoad) {
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
+      // 模擬網路延遲
+      await new Promise(resolve => setTimeout(resolve, 300));
       
       const cloudKey = `homework_cloud_${username}`;
       const data = localStorage.getItem(cloudKey);
       
-      if (isFirstLoad) {
-        updateSyncStatus('online');
-      }
-      
+      updateSyncStatus('online');
       return data ? JSON.parse(data) : null;
     } catch (error) {
       console.error('載入錯誤:', error);
@@ -519,36 +506,19 @@ const addClassModal = document.getElementById('add-class-modal');
 const newClassNameInput = document.getElementById('new-class-name');
 
 // 同步狀態管理
-let currentSyncStatus = 'offline';
-let syncStatusTimeout = null;
-
 function updateSyncStatus(status) {
-  // 避免相同狀態重複更新
-  if (currentSyncStatus === status) return;
-  
-  currentSyncStatus = status;
   const syncStatus = document.getElementById('sync-status');
-  
-  // 清除之前的超時
-  if (syncStatusTimeout) {
-    clearTimeout(syncStatusTimeout);
-  }
-  
   syncStatus.className = `sync-status sync-${status}`;
   
   switch(status) {
     case 'online':
-      syncStatus.innerHTML = '● 已同步';
+      syncStatus.innerHTML = '● 雲端已同步';
       break;
     case 'syncing':
-      syncStatus.innerHTML = '<div class="loading"></div> 同步中';
-      // 同步狀態最多顯示3秒，然後自動變回online
-      syncStatusTimeout = setTimeout(() => {
-        updateSyncStatus('online');
-      }, 3000);
+      syncStatus.innerHTML = '<div class="loading"></div> 同步中...';
       break;
     case 'offline':
-      syncStatus.innerHTML = '● 離線';
+      syncStatus.innerHTML = '● 離線模式';
       break;
   }
 }
@@ -1136,34 +1106,26 @@ document.getElementById('title').addEventListener('keypress', (e) => {
   if (e.key === 'Enter') document.getElementById('add-task').click();
 });
 
-// 定期同步檢查 - 降低頻率並避免不必要的狀態更新
-let lastSyncCheck = 0;
+// 定期同步檢查
 setInterval(async () => {
-  if (currentUser && Date.now() - lastSyncCheck > 60000) { // 改為60秒檢查一次
-    lastSyncCheck = Date.now();
-    
-    try {
-      const latestData = await cloudStorage.loadData(currentUser);
-      if (latestData && latestData.lastSync) {
-        const currentDataString = JSON.stringify(classes);
-        const latestDataString = JSON.stringify(latestData.classes);
-        
-        if (currentDataString !== latestDataString) {
-          // 發現資料不一致，靜默更新本地資料
-          classes = latestData.classes;
-          activeClassId = latestData.activeClassId;
-          sortOrder = latestData.sortOrder;
-          renderClasses();
-          renderTasks();
-          showStatus('已同步其他設備的最新資料');
-        }
+  if (currentUser) {
+    // 每30秒檢查一次是否有其他設備的更新
+    const latestData = await cloudStorage.loadData(currentUser);
+    if (latestData && latestData.lastSync) {
+      const currentDataString = JSON.stringify(classes);
+      const latestDataString = JSON.stringify(latestData.classes);
+      
+      if (currentDataString !== latestDataString) {
+        // 發現資料不一致，更新本地資料
+        classes = latestData.classes;
+        activeClassId = latestData.activeClassId;
+        sortOrder = latestData.sortOrder;
+        render();
+        showStatus('已同步其他設備的最新資料');
       }
-    } catch (error) {
-      // 靜默處理錯誤，不顯示同步狀態變化
-      console.log('背景同步檢查失敗');
     }
   }
-}, 60000); // 改為60秒檢查一次
+}, 30000);
 
 // 初始化應用
 initApp();
