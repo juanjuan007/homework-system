@@ -79,7 +79,6 @@
   .active { background: #3b82f6; color: #fff; }
   button { cursor: pointer; margin: 2px; }
   .grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; margin-bottom: 10px; }
-  .inline-input { width: 100px; }
   
   /* 登入頁面樣式 */
   .login-container {
@@ -200,9 +199,24 @@
     color: #721c24;
     border: 1px solid #f5c6cb;
   }
+  
+  .sync-status {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 12px;
+    z-index: 1001;
+    background: #d4edda;
+    color: #155724;
+  }
 </style>
 </head>
 <body>
+
+<!-- 同步狀態顯示 -->
+<div id="sync-status" class="sync-status">● 已連線</div>
 
 <!-- 登入頁面 -->
 <div id="login-page" class="login-container login-page">
@@ -295,11 +309,8 @@
 </div>
 
 <script>
-// 用戶管理系統 - 使用 localStorage
-let users = {};
+// 全域變數
 let currentUser = null;
-
-// 應用程式資料
 let classes = [];
 let activeClassId = null;
 let sortOrder = 'new';
@@ -318,7 +329,7 @@ const selectedNumbers = new Set();
 // 管理員相關
 const adminBadge = document.getElementById('admin-badge');
 const adminPanel = document.getElementById('admin-panel');
-const adminUsers = ['admin']; // 管理員用戶名列表
+const adminUsers = ['admin'];
 
 // 編輯模式相關變數
 let editingTaskId = null;
@@ -331,47 +342,59 @@ const editTitleInput = document.getElementById('edit-title');
 const addClassModal = document.getElementById('add-class-modal');
 const newClassNameInput = document.getElementById('new-class-name');
 
-// 初始化 - 使用 localStorage
-function initApp() {
-  const storedUsers = localStorage.getItem('homework_users');
-  if (storedUsers) {
-    users = JSON.parse(storedUsers);
-  }
-  
-  const storedCurrentUser = localStorage.getItem('homework_current_user');
-  if (storedCurrentUser) {
-    currentUser = storedCurrentUser;
-    loadUserData();
-    showMainApp();
-  }
+// 雲端同步功能
+function getUserKey(username) {
+  return `homework_user_${username}`;
+}
+
+function getAuthKey() {
+  return 'homework_auth';
 }
 
 // 保存用戶資料
-function saveUsers() {
-  localStorage.setItem('homework_users', JSON.stringify(users));
+function saveUserData() {
+  if (!currentUser) return;
+  
+  const userData = {
+    classes: classes,
+    activeClassId: activeClassId,
+    sortOrder: sortOrder,
+    lastUpdate: new Date().toISOString()
+  };
+  
+  localStorage.setItem(getUserKey(currentUser), JSON.stringify(userData));
+  
+  // 更新同步狀態
+  const syncStatus = document.getElementById('sync-status');
+  syncStatus.textContent = '● 已同步';
 }
 
-// 保存當前用戶資料
-function save() {
-  if (currentUser && users[currentUser]) {
-    users[currentUser].classes = classes;
-    users[currentUser].activeClassId = activeClassId;
-    users[currentUser].sortOrder = sortOrder;
-    saveUsers();
-  }
-}
-
-// 載入當前用戶資料
+// 載入用戶資料
 function loadUserData() {
-  if (currentUser && users[currentUser]) {
-    const userData = users[currentUser];
-    classes = userData.classes || [{ id: Date.now(), name: '班級一', tasks: [] }];
-    activeClassId = userData.activeClassId || classes[0].id;
-    sortOrder = userData.sortOrder || 'new';
+  if (!currentUser) return;
+  
+  const userData = localStorage.getItem(getUserKey(currentUser));
+  
+  if (userData) {
+    const data = JSON.parse(userData);
+    classes = data.classes || [{ id: Date.now(), name: '班級一', tasks: [] }];
+    activeClassId = data.activeClassId || classes[0].id;
+    sortOrder = data.sortOrder || 'new';
   } else {
     classes = [{ id: Date.now(), name: '班級一', tasks: [] }];
     activeClassId = classes[0].id;
     sortOrder = 'new';
+  }
+}
+
+// 初始化
+function initApp() {
+  // 檢查是否有記住的登入狀態
+  const rememberedUser = localStorage.getItem('homework_current_user');
+  if (rememberedUser) {
+    currentUser = rememberedUser;
+    loadUserData();
+    showMainApp();
   }
 }
 
@@ -434,20 +457,29 @@ function register() {
     return;
   }
   
-  if (users[username]) {
+  // 檢查用戶是否已存在
+  const authData = localStorage.getItem(getAuthKey()) || '{}';
+  const auth = JSON.parse(authData);
+  
+  if (auth[username]) {
     showAuthMessage('用戶名稱已存在', true);
     return;
   }
   
-  users[username] = {
-    password: password,
+  // 保存用戶認證信息
+  auth[username] = password;
+  localStorage.setItem(getAuthKey(), JSON.stringify(auth));
+  
+  // 創建初始用戶資料
+  const initialData = {
     classes: [{ id: Date.now(), name: '班級一', tasks: [] }],
     activeClassId: null,
-    sortOrder: 'new'
+    sortOrder: 'new',
+    createdAt: new Date().toISOString()
   };
-  users[username].activeClassId = users[username].classes[0].id;
+  initialData.activeClassId = initialData.classes[0].id;
+  localStorage.setItem(getUserKey(username), JSON.stringify(initialData));
   
-  saveUsers();
   showAuthMessage('註冊成功！請登入');
   
   document.getElementById('register-username').value = '';
@@ -466,7 +498,11 @@ function login() {
     return;
   }
   
-  if (!users[username] || users[username].password !== password) {
+  // 檢查認證
+  const authData = localStorage.getItem(getAuthKey()) || '{}';
+  const auth = JSON.parse(authData);
+  
+  if (!auth[username] || auth[username] !== password) {
     showAuthMessage('用戶名稱或密碼錯誤', true);
     return;
   }
@@ -479,7 +515,7 @@ function login() {
 
 // 登出功能
 function logout() {
-  save();
+  saveUserData();
   currentUser = null;
   localStorage.removeItem('homework_current_user');
   classes = [];
@@ -569,6 +605,7 @@ function setupEventListeners() {
     sortNewBtn.onclick = () => { 
       sortOrder = 'new'; 
       renderTasks(); 
+      saveUserData();
     };
   }
   
@@ -576,6 +613,7 @@ function setupEventListeners() {
     sortOldBtn.onclick = () => { 
       sortOrder = 'old'; 
       renderTasks(); 
+      saveUserData();
     };
   }
 }
@@ -694,7 +732,7 @@ function render() {
   renderClasses(); 
   renderNumbers(); 
   renderTasks(); 
-  save(); 
+  saveUserData();
 }
 
 // 開啟編輯作業彈出窗
@@ -736,13 +774,14 @@ function saveEditTask() {
   task.title = newTitle;
   task.numbers = [...editSelectedNumbers].sort((a,b) => a-b);
   
-  save();
   renderTasks();
   showStatus('作業已更新');
   
   editModal.classList.add('hidden');
   editingTaskId = null;
   editSelectedNumbers.clear();
+  
+  saveUserData();
 }
 
 // 取消編輯
@@ -760,27 +799,27 @@ window.editTask = (id) => {
 // 管理員功能：查看所有用戶
 function showAllUsers() {
   const adminInfo = document.getElementById('admin-info');
-  const userList = Object.keys(users).map(username => {
-    const userData = users[username];
-    const classCount = userData.classes ? userData.classes.length : 0;
-    const taskCount = userData.classes ? userData.classes.reduce((total, cls) => total + cls.tasks.length, 0) : 0;
-    return `${username}: ${classCount}個班級, ${taskCount}個作業`;
-  });
+  const authData = localStorage.getItem(getAuthKey()) || '{}';
+  const auth = JSON.parse(authData);
+  const userList = Object.keys(auth);
   
   adminInfo.innerHTML = `
-    <h4>所有用戶 (${Object.keys(users).length}人):</h4>
+    <h4>所有用戶 (${userList.length}人):</h4>
     <div style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 200px; overflow-y: auto;">
-      ${userList.map(info => `<div>${info}</div>`).join('')}
+      ${userList.map(username => `<div>${username}</div>`).join('')}
     </div>
   `;
 }
 
 // 管理員功能：匯出全部資料
 function exportAllData() {
+  const authData = localStorage.getItem(getAuthKey()) || '{}';
+  const auth = JSON.parse(authData);
+  
   const allData = {
     exportTime: new Date().toISOString(),
-    totalUsers: Object.keys(users).length,
-    users: users
+    totalUsers: Object.keys(auth).length,
+    users: auth
   };
   
   const dataStr = JSON.stringify(allData, null, 2);
