@@ -46,7 +46,7 @@
     }
     
     .grid {
-      grid-template-columns: repeat(6, 1fr);
+      grid-template-columns: repeat(6, 1fr) !important;
       gap: 8px;
     }
     
@@ -64,15 +64,31 @@
       width: 95%;
       margin: 10px;
     }
+    
+    .task-item {
+      padding: 12px;
+    }
+    
+    .task-numbers {
+      font-size: 13px;
+    }
   }
   
   @media (max-width: 480px) {
     .grid {
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(5, 1fr) !important;
     }
     
     .main-content {
       padding: 10px;
+    }
+    
+    h1 {
+      font-size: 24px;
+    }
+    
+    .user-info {
+      font-size: 14px;
     }
   }
   
@@ -89,6 +105,14 @@
     border-radius: 8px;
     text-align: center;
     background: white;
+  }
+  
+  @media (max-width: 768px) {
+    .login-container {
+      margin: 50px auto;
+      padding: 20px;
+      width: 90%;
+    }
   }
   
   .login-form input {
@@ -200,31 +224,6 @@
     border: 1px solid #f5c6cb;
   }
   
-  .sync-status {
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    padding: 5px 10px;
-    border-radius: 15px;
-    font-size: 12px;
-    z-index: 1001;
-  }
-  
-  .sync-online {
-    background: #d4edda;
-    color: #155724;
-  }
-  
-  .sync-syncing {
-    background: #fff3cd;
-    color: #856404;
-  }
-  
-  .sync-offline {
-    background: #f8d7da;
-    color: #721c24;
-  }
-  
   .loading {
     display: inline-block;
     width: 20px;
@@ -239,17 +238,52 @@
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
   }
+  
+  .task-item {
+    background: #f5f5f5;
+    padding: 10px;
+    margin: 5px 0;
+    border-radius: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .task-item:hover {
+    background: #e5e5e5;
+  }
+  
+  .task-numbers {
+    color: #dc2626;
+    font-weight: bold;
+  }
+  
+  .task-actions button {
+    margin-left: 5px;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  
+  .edit-btn {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 3px;
+  }
+  
+  .delete-btn {
+    background: #dc2626;
+    color: white;
+    border: none;
+    border-radius: 3px;
+  }
 </style>
 </head>
 <body>
 
-<!-- 同步狀態顯示 -->
-<div id="sync-status" class="sync-status sync-offline">● 連線中...</div>
-
 <!-- 登入頁面 -->
 <div id="login-page" class="login-container login-page">
   <h2>作業紀錄系統</h2>
-  <p style="font-size: 14px; color: #666;">☁️ 雲端同步 - 多裝置共用</p>
   
   <div class="tab-buttons">
     <div class="tab-button active" onclick="switchTab('login')">登入</div>
@@ -290,7 +324,7 @@
     <button id="add-class">+ 新增班級</button>
     <button id="delete-class">刪除班級</button>
     <hr>
-    <input id="title" placeholder="輸入作業標題">
+    <input id="title" placeholder="輸入作業標題" style="width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box;">
     <div id="numbers" class="grid"></div>
     <button id="add-task">新增作業</button>
     <hr>
@@ -313,7 +347,7 @@
     <div class="modal-content">
       <h3>新增班級</h3>
       <p>輸入班級名稱：</p>
-      <input type="text" id="new-class-name" style="width: 100%; padding: 8px; margin-bottom: 15px;">
+      <input type="text" id="new-class-name" style="width: 100%; padding: 8px; margin-bottom: 15px; box-sizing: border-box;">
       <div class="modal-buttons">
         <button onclick="saveNewClass()">確定</button>
         <button onclick="cancelNewClass()">取消</button>
@@ -326,7 +360,7 @@
     <div class="modal-content">
       <h3>編輯作業</h3>
       <p>作業標題：</p>
-      <input type="text" id="edit-title" style="width: 100%; padding: 8px; margin-bottom: 15px;">
+      <input type="text" id="edit-title" style="width: 100%; padding: 8px; margin-bottom: 15px; box-sizing: border-box;">
       <p>選擇沒交作業的座號：</p>
       <div id="edit-numbers" class="grid"></div>
       <div class="modal-buttons">
@@ -337,54 +371,16 @@
   </div>
 </div>
 
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-
 <script>
-// Firebase 配置 - 使用公開的演示資料庫
-const firebaseConfig = {
-  apiKey: "AIzaSyDemoKey123456789",
-  authDomain: "homework-demo.firebaseapp.com",
-  projectId: "homework-system-demo",
-  storageBucket: "homework-demo.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:demo123456789"
-};
-
-// 初始化 Firebase（模擬版本）
-let db = null;
-let isFirebaseAvailable = false;
-
-// 檢查 Firebase 是否可用
-function initFirebase() {
-  try {
-    // 在實際部署時，這裡會連接真正的 Firebase
-    // 現在使用模擬的雲端同步
-    isFirebaseAvailable = false; // 設為 false 使用模擬模式
-    updateSyncStatus('online');
-    return true;
-  } catch (error) {
-    console.log('Firebase 未配置，使用模擬雲端模式');
-    isFirebaseAvailable = false;
-    updateSyncStatus('offline');
-    return false;
-  }
-}
-
 // 雲端儲存 API
 class CloudStorage {
   constructor() {
-    this.endpoint = 'https://api.jsonbin.io/v3/b'; // 免費的 JSON 儲存服務
-    this.apiKey = 'demo-key'; // 演示用
+    this.endpoint = 'https://api.jsonbin.io/v3/b';
+    this.apiKey = 'demo-key';
   }
 
   async saveData(username, userData) {
-    updateSyncStatus('syncing');
-    
     try {
-      // 模擬雲端儲存 - 實際上使用增強的 localStorage
       const cloudKey = `homework_cloud_${username}`;
       const dataWithTimestamp = {
         ...userData,
@@ -392,13 +388,10 @@ class CloudStorage {
         syncId: Date.now()
       };
       
-      // 保存到本地
       localStorage.setItem(cloudKey, JSON.stringify(dataWithTimestamp));
       
-      // 模擬網路延遲
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // 模擬跨設備同步 - 使用 BroadcastChannel
       if (typeof BroadcastChannel !== 'undefined') {
         const channel = new BroadcastChannel('homework_sync');
         channel.postMessage({
@@ -408,30 +401,23 @@ class CloudStorage {
         });
       }
       
-      updateSyncStatus('online');
       return true;
     } catch (error) {
       console.error('儲存錯誤:', error);
-      updateSyncStatus('offline');
       return false;
     }
   }
 
   async loadData(username) {
-    updateSyncStatus('syncing');
-    
     try {
-      // 模擬網路延遲
       await new Promise(resolve => setTimeout(resolve, 300));
       
       const cloudKey = `homework_cloud_${username}`;
       const data = localStorage.getItem(cloudKey);
       
-      updateSyncStatus('online');
       return data ? JSON.parse(data) : null;
     } catch (error) {
       console.error('載入錯誤:', error);
-      updateSyncStatus('offline');
       return null;
     }
   }
@@ -529,7 +515,6 @@ function setupCrossDeviceSync() {
     const channel = new BroadcastChannel('homework_sync');
     channel.onmessage = (event) => {
       if (event.data.type === 'data_update' && event.data.username === currentUser) {
-        // 其他設備更新了資料，自動重新載入
         loadUserData();
         render();
         showStatus('資料已從其他設備同步');
@@ -566,22 +551,7 @@ async function loadUserData() {
     classes = [{ id: Date.now(), name: '班級一', tasks: [] }];
     activeClassId = classes[0].id;
     sortOrder = 'new';
-    // 保存初始資料
     await saveUserData();
-  }
-}
-
-// 初始化
-async function initApp() {
-  initFirebase();
-  setupCrossDeviceSync();
-  
-  // 檢查是否有記住的登入狀態
-  const rememberedUser = localStorage.getItem('homework_current_user_cloud');
-  if (rememberedUser) {
-    currentUser = rememberedUser;
-    await loadUserData();
-    showMainApp();
   }
 }
 
@@ -649,17 +619,14 @@ async function register() {
   registerBtn.disabled = true;
   
   try {
-    // 檢查用戶是否已存在
     const existingUser = await cloudStorage.loadData(username);
     if (existingUser) {
       showAuthMessage('用戶名稱已存在', true);
       return;
     }
     
-    // 保存認證資訊
     await cloudStorage.saveAuth(username, password);
     
-    // 創建初始用戶資料
     const initialData = {
       classes: [{ id: Date.now(), name: '班級一', tasks: [] }],
       activeClassId: null,
@@ -700,7 +667,6 @@ async function login() {
   loginBtn.disabled = true;
   
   try {
-    // 檢查認證
     const isValid = await cloudStorage.checkAuth(username, password);
     
     if (!isValid) {
@@ -742,7 +708,6 @@ function showMainApp() {
   mainApp.classList.remove('hidden');
   currentUserSpan.textContent = currentUser;
   
-  // 檢查管理員身分
   if (adminUsers.includes(currentUser)) {
     adminBadge.classList.remove('hidden');
     adminPanel.classList.remove('hidden');
@@ -784,11 +749,14 @@ function setupEventListeners() {
       }
       
       const deletedClass = classes.find(c => c.id === activeClassId);
-      classes = classes.filter(c => c.id !== activeClassId);
-      activeClassId = classes[0].id;
-      selectedNumbers.clear();
-      render();
-      showStatus(`已刪除班級：${deletedClass.name}`);
+      if (confirm(`確定要刪除班級「${deletedClass.name}」嗎？`)) {
+        classes = classes.filter(c => c.id !== activeClassId);
+        activeClassId = classes[0].id;
+        selectedNumbers.clear();
+        render();
+        saveUserData();
+        showStatus(`已刪除班級：${deletedClass.name}`);
+      }
     };
   }
 
@@ -801,10 +769,16 @@ function setupEventListeners() {
       }
       
       const cls = classes.find(c => c.id === activeClassId);
-      cls.tasks.unshift({ id: Date.now(), title, numbers: [...selectedNumbers] });
+      cls.tasks.unshift({ 
+        id: Date.now(), 
+        title, 
+        numbers: [...selectedNumbers].sort((a, b) => a - b),
+        date: new Date().toISOString()
+      });
       titleInput.value = '';
       selectedNumbers.clear();
       render();
+      saveUserData();
       showStatus('作業已新增');
     };
   }
@@ -854,6 +828,7 @@ async function saveNewClass() {
   activeClassId = newClass.id;
   selectedNumbers.clear();
   render();
+  await saveUserData();
   showStatus(`已新增班級：${name}`);
   
   addClassModal.classList.add('hidden');
@@ -881,6 +856,7 @@ function renderClasses() {
       activeClassId = c.id; 
       selectedNumbers.clear();
       render(); 
+      saveUserData();
     };
     
     classButtons.appendChild(btn);
@@ -904,4 +880,196 @@ function renderNumbers() {
 
 // 渲染編輯模式的座號選擇器
 function renderEditNumbers() {
-  editNumbersDiv.innerHTML
+  editNumbersDiv.innerHTML = '';
+  for (let i = 1; i <= 40; i++) {
+    const btn = document.createElement('button');
+    btn.textContent = i;
+    if (editSelectedNumbers.has(i)) btn.style.background = '#fca5a5';
+    btn.onclick = () => { 
+      editSelectedNumbers.has(i) ? editSelectedNumbers.delete(i) : editSelectedNumbers.add(i); 
+      renderEditNumbers(); 
+    };
+    editNumbersDiv.appendChild(btn);
+  }
+}
+
+// 渲染作業列表
+function renderTasks() {
+  const cls = classes.find(c => c.id === activeClassId);
+  if (!cls) return;
+  
+  let tasks = [...cls.tasks];
+  if (sortOrder === 'old') tasks.reverse();
+  
+  tasksDiv.innerHTML = '';
+  tasks.forEach(task => {
+    const div = document.createElement('div');
+    div.className = 'task-item';
+    
+    const taskInfo = document.createElement('div');
+    taskInfo.innerHTML = `
+      <strong>${task.title}</strong>
+      ${task.numbers.length > 0 ? 
+        `<span class="task-numbers"> - 缺交: ${task.numbers.join(', ')}</span>` : 
+        '<span style="color: green;"> - 全交</span>'}
+    `;
+    
+    const taskActions = document.createElement('div');
+    taskActions.className = 'task-actions';
+    
+    const editBtn = document.createElement('button');
+    editBtn.textContent = '編輯';
+    editBtn.className = 'edit-btn';
+    editBtn.onclick = () => openEditTask(task.id);
+    
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = '刪除';
+    deleteBtn.className = 'delete-btn';
+    deleteBtn.onclick = () => deleteTask(task.id);
+    
+    taskActions.appendChild(editBtn);
+    taskActions.appendChild(deleteBtn);
+    
+    div.appendChild(taskInfo);
+    div.appendChild(taskActions);
+    tasksDiv.appendChild(div);
+  });
+}
+
+// 開啟編輯作業
+function openEditTask(taskId) {
+  const cls = classes.find(c => c.id === activeClassId);
+  const task = cls.tasks.find(t => t.id === taskId);
+  
+  if (!task) return;
+  
+  editingTaskId = taskId;
+  editTitleInput.value = task.title;
+  editSelectedNumbers.clear();
+  task.numbers.forEach(n => editSelectedNumbers.add(n));
+  
+  renderEditNumbers();
+  editModal.classList.remove('hidden');
+}
+
+// 保存編輯的作業
+async function saveEditTask() {
+  const cls = classes.find(c => c.id === activeClassId);
+  const task = cls.tasks.find(t => t.id === editingTaskId);
+  
+  if (!task) return;
+  
+  task.title = editTitleInput.value.trim();
+  task.numbers = [...editSelectedNumbers].sort((a, b) => a - b);
+  
+  renderTasks();
+  await saveUserData();
+  showStatus('作業已更新');
+  
+  editModal.classList.add('hidden');
+  editingTaskId = null;
+  editSelectedNumbers.clear();
+}
+
+// 取消編輯
+function cancelEditTask() {
+  editModal.classList.add('hidden');
+  editingTaskId = null;
+  editSelectedNumbers.clear();
+}
+
+// 刪除作業
+async function deleteTask(taskId) {
+  if (!confirm('確定要刪除這項作業嗎？')) return;
+  
+  const cls = classes.find(c => c.id === activeClassId);
+  cls.tasks = cls.tasks.filter(t => t.id !== taskId);
+  
+  renderTasks();
+  await saveUserData();
+  showStatus('作業已刪除');
+}
+
+// 渲染所有元素
+function render() {
+  renderClasses();
+  renderNumbers();
+  renderTasks();
+}
+
+// 管理員功能：查看所有用戶
+async function showAllUsers() {
+  const users = await cloudStorage.getUserList();
+  const adminInfo = document.getElementById('admin-info');
+  
+  let html = '<h4>所有註冊用戶：</h4><ul>';
+  for (const username in users) {
+    const userData = await cloudStorage.loadData(username);
+    const taskCount = userData ? userData.classes.reduce((sum, cls) => sum + cls.tasks.length, 0) : 0;
+    html += `<li>${username} - ${taskCount} 項作業記錄</li>`;
+  }
+  html += '</ul>';
+  
+  adminInfo.innerHTML = html;
+}
+
+// 管理員功能：匯出全部資料
+async function exportAllData() {
+  const users = await cloudStorage.getUserList();
+  const allData = {};
+  
+  for (const username in users) {
+    const userData = await cloudStorage.loadData(username);
+    if (userData) {
+      allData[username] = userData;
+    }
+  }
+  
+  const dataStr = JSON.stringify(allData, null, 2);
+  const dataBlob = new Blob([dataStr], { type: 'application/json' });
+  const url = URL.createObjectURL(dataBlob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `homework_data_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  
+  URL.revokeObjectURL(url);
+  showStatus('資料已匯出');
+}
+
+// 初始化應用程式
+async function initApp() {
+  setupCrossDeviceSync();
+  
+  const rememberedUser = localStorage.getItem('homework_current_user_cloud');
+  if (rememberedUser) {
+    currentUser = rememberedUser;
+    await loadUserData();
+    showMainApp();
+  }
+  
+  // Enter 鍵快捷鍵
+  document.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      if (!loginPage.classList.contains('hidden')) {
+        if (!document.getElementById('login-form').classList.contains('hidden')) {
+          login();
+        } else {
+          register();
+        }
+      } else if (!addClassModal.classList.contains('hidden')) {
+        saveNewClass();
+      } else if (!editModal.classList.contains('hidden')) {
+        saveEditTask();
+      }
+    }
+  });
+}
+
+// 啟動應用程式
+initApp();
+</script>
+
+</body>
+</html>
