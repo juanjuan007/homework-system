@@ -324,9 +324,9 @@
     <button id="add-class">+ 新增班級</button>
     <button id="delete-class">刪除班級</button>
     <hr>
-    <input id="title" placeholder="名稱" style="width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box;">
+    <input id="title" placeholder="輸入作業標題" style="width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box;">
     <div id="numbers" class="grid"></div>
-    <button id="add-task">新增</button>
+    <button id="add-task">新增作業</button>
     <hr>
     <button id="sort-new">新 → 舊</button>
     <button id="sort-old">舊 → 新</button>
@@ -749,14 +749,12 @@ function setupEventListeners() {
       }
       
       const deletedClass = classes.find(c => c.id === activeClassId);
-      if (confirm(`確定要刪除班級「${deletedClass.name}」嗎？`)) {
-        classes = classes.filter(c => c.id !== activeClassId);
-        activeClassId = classes[0].id;
-        selectedNumbers.clear();
-        render();
-        saveUserData();
-        showStatus(`已刪除班級：${deletedClass.name}`);
-      }
+      classes = classes.filter(c => c.id !== activeClassId);
+      activeClassId = classes[0].id;
+      selectedNumbers.clear();
+      render();
+      saveUserData();
+      showStatus(`已刪除班級：${deletedClass.name}`);
     };
   }
 
@@ -980,8 +978,6 @@ function cancelEditTask() {
 
 // 刪除作業
 async function deleteTask(taskId) {
-  if (!confirm('確定要刪除這項作業嗎？')) return;
-  
   const cls = classes.find(c => c.id === activeClassId);
   cls.tasks = cls.tasks.filter(t => t.id !== taskId);
   
