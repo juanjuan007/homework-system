@@ -335,7 +335,7 @@
   </div>
   
   <div id="auth-message"></div>
-
+  
 </div>
 
 <!-- 主應用程式 -->
@@ -732,6 +732,7 @@ async function loadUserData() {
     
     if (error) {
       if (error.code === 'PGRST116') {
+        // 沒有資料，建立初始資料
         classes = [{ id: Date.now(), name: '班級一', tasks: [] }];
         activeClassId = classes[0].id;
         sortOrder = 'new';
@@ -740,15 +741,61 @@ async function loadUserData() {
         throw error;
       }
     } else if (data && data.data) {
-      classes = data.data.classes || [];
-      activeClassId = data.data.activeClassId || (classes[0]?.id);
-      sortOrder = data.data.sortOrder || 'new';
+      // 載入雲端資料前，先檢查本地備份
+      const localBackup = localStorage.getItem(`homework_backup_${currentUserId}`);
+      if (localBackup) {
+        const backupData = JSON.parse(localBackup);
+        console.log('發現本地備份，比較資料...');
+        
+        // 如果本地備份有更多作業，使用本地備份
+        const cloudTaskCount = data.data.classes?.reduce((sum, cls) => sum + (cls.tasks?.length || 0), 0) || 0;
+        const localTaskCount = backupData.classes?.reduce((sum, cls) => sum + (cls.tasks?.length || 0), 0) || 0;
+        
+        if (localTaskCount > cloudTaskCount) {
+          console.log(`本地資料較新 (${localTaskCount} vs ${cloudTaskCount} 個作業)，使用本地資料並同步到雲端`);
+          classes = backupData.classes || [];
+          activeClassId = backupData.activeClassId || (classes[0]?.id);
+          sortOrder = backupData.sortOrder || 'new';
+          
+          // 立即同步到雲端
+          await saveUserData();
+          // 清除備份
+          localStorage.removeItem(`homework_backup_${currentUserId}`);
+        } else {
+          // 使用雲端資料
+          classes = data.data.classes || [];
+          activeClassId = data.data.activeClassId || (classes[0]?.id);
+          sortOrder = data.data.sortOrder || 'new';
+          // 清除舊備份
+          localStorage.removeItem(`homework_backup_${currentUserId}`);
+        }
+      } else {
+        // 沒有本地備份，直接使用雲端資料
+        classes = data.data.classes || [];
+        activeClassId = data.data.activeClassId || (classes[0]?.id);
+        sortOrder = data.data.sortOrder || 'new';
+      }
+      
+      console.log('載入資料完成:', { 
+        班級數: classes.length, 
+        作業總數: classes.reduce((sum, cls) => sum + (cls.tasks?.length || 0), 0) 
+      });
     }
     
     updateSyncStatus('synced');
   } catch (error) {
     console.error('載入資料錯誤:', error);
     updateSyncStatus('error');
+    
+    // 嘗試使用本地備份
+    const localBackup = localStorage.getItem(`homework_backup_${currentUserId}`);
+    if (localBackup) {
+      const backupData = JSON.parse(localBackup);
+      classes = backupData.classes || [];
+      activeClassId = backupData.activeClassId || (classes[0]?.id);
+      sortOrder = backupData.sortOrder || 'new';
+      showStatus('使用本地備份資料', false);
+    }
   }
 }
 
@@ -765,25 +812,54 @@ async function saveUserData() {
   };
   
   try {
-    const { error } = await supabase
+    // 先檢查是否已有資料
+    const { data: existing, error: checkError } = await supabase
       .from('homework_data')
-      .upsert([
-        {
+      .select('id')
+      .eq('user_id', currentUserId)
+      .single();
+    
+    if (checkError && checkError.code !== 'PGRST116') {
+      throw checkError;
+    }
+    
+    let saveError;
+    
+    if (existing) {
+      // 更新現有資料
+      const { error } = await supabase
+        .from('homework_data')
+        .update({
+          data: userData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', currentUserId);
+      
+      saveError = error;
+    } else {
+      // 插入新資料
+      const { error } = await supabase
+        .from('homework_data')
+        .insert([{
           user_id: currentUserId,
           data: userData,
           updated_at: new Date().toISOString()
-        }
-      ], {
-        onConflict: 'user_id'
-      });
+        }]);
+      
+      saveError = error;
+    }
     
-    if (error) throw error;
+    if (saveError) throw saveError;
     
     updateSyncStatus('synced');
+    console.log('資料已保存:', userData);
   } catch (error) {
     console.error('儲存資料錯誤:', error);
     updateSyncStatus('error');
     showStatus('同步失敗，資料暫存在本地', true);
+    
+    // 保存到本地儲存作為備份
+    localStorage.setItem(`homework_backup_${currentUserId}`, JSON.stringify(userData));
   }
 }
 
@@ -804,10 +880,12 @@ function showMainApp(isAdmin = false) {
   setupEventListeners();
   render();
   
+  // 降低同步頻率，改為每 60 秒同步一次
   syncInterval = setInterval(async () => {
+    console.log('定時同步中...');
     await loadUserData();
     render();
-  }, 30000);
+  }, 60000); // 60 秒
 }
 
 // 顯示登入頁面
