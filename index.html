@@ -335,7 +335,7 @@
   </div>
   
   <div id="auth-message"></div>
-  
+
 </div>
 
 <!-- 主應用程式 -->
@@ -717,7 +717,7 @@ async function checkAutoLogin() {
   }
 }
 
-// 合併資料（保留所有作業）
+// 合併資料（保留所有作業，但更新相同ID的作業內容）
 function mergeData(localData, cloudData) {
   // 建立作業 ID 對照表
   const taskMap = new Map();
@@ -727,18 +727,19 @@ function mergeData(localData, cloudData) {
     cloudData.classes.forEach(cloudClass => {
       if (cloudClass.tasks) {
         cloudClass.tasks.forEach(task => {
-          taskMap.set(task.id, task);
+          taskMap.set(task.id, {...task});
         });
       }
     });
   }
   
-  // 再加入本地的所有作業（如果 ID 相同會更新，不同則新增）
+  // 再加入本地的所有作業（相同 ID 會覆蓋更新）
   if (localData && localData.classes) {
     localData.classes.forEach((localClass, classIndex) => {
       if (localClass.tasks) {
         localClass.tasks.forEach(task => {
-          taskMap.set(task.id, task);
+          // 如果是相同 ID，完全覆蓋（包括缺交記錄）
+          taskMap.set(task.id, {...task});
         });
       }
     });
@@ -1256,12 +1257,28 @@ async function saveEditTask() {
   
   if (!task) return;
   
-  task.title = editTitleInput.value.trim();
-  task.numbers = [...editSelectedNumbers].sort((a, b) => a - b);
+  const newTitle = editTitleInput.value.trim();
+  const newNumbers = [...editSelectedNumbers].sort((a, b) => a - b);
+  
+  // 記錄修改前後的變化
+  console.log('編輯作業:', {
+    作業ID: task.id,
+    原標題: task.title,
+    新標題: newTitle,
+    原缺交: task.numbers,
+    新缺交: newNumbers
+  });
+  
+  // 更新作業資料（完全覆蓋）
+  task.title = newTitle;
+  task.numbers = newNumbers;
+  task.updatedAt = new Date().toISOString();
   
   renderTasks();
-  await saveUserData();
-  showStatus('作業已更新');
+  
+  // 強制立即保存
+  await saveUserData(true);
+  showStatus('作業已更新並同步');
   
   editModal.classList.add('hidden');
   editingTaskId = null;
@@ -1277,12 +1294,26 @@ function cancelEditTask() {
 
 // 刪除作業
 async function deleteTask(taskId) {
+  if (!confirm('確定要刪除這個作業嗎？')) {
+    return;
+  }
+  
   const cls = classes.find(c => c.id === activeClassId);
+  const taskToDelete = cls.tasks.find(t => t.id === taskId);
+  
+  console.log('刪除作業:', {
+    作業ID: taskId,
+    標題: taskToDelete?.title,
+    缺交: taskToDelete?.numbers
+  });
+  
   cls.tasks = cls.tasks.filter(t => t.id !== taskId);
   
   renderTasks();
-  await saveUserData();
-  showStatus('作業已刪除');
+  
+  // 強制立即保存
+  await saveUserData(true);
+  showStatus('作業已刪除並同步');
 }
 
 // 渲染所有元素
