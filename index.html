@@ -418,6 +418,10 @@ CREATE POLICY "Homework data access" ON homework_data
         <button onclick="saveSupabaseConfig()" style="width: 100%; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; font-size: 16px; margin-top: 5px;">
           儲存設定並開始使用
         </button>
+        <hr style="margin: 20px 0;">
+        <p style="text-align: center; color: #666; font-size: 14px;">
+          💡 提示：設定一次後就會永久記住，不需要每次都設定
+        </p>
       </div>
       <div id="setup-message"></div>
     </div>
@@ -645,8 +649,23 @@ function checkSupabaseConfig() {
     loginPage.classList.remove('hidden');
     checkAutoLogin();
   } else {
-    setupModal.classList.remove('hidden');
-    loginPage.classList.add('hidden');
+    // 檢查是否有預設的 Supabase 設定
+    const defaultUrl = 'YOUR_SUPABASE_URL_HERE';  // 在這裡填入您的 Supabase URL
+    const defaultKey = 'YOUR_SUPABASE_ANON_KEY_HERE';  // 在這裡填入您的 Anon Key
+    
+    if (defaultUrl !== 'YOUR_SUPABASE_URL_HERE' && defaultKey !== 'YOUR_SUPABASE_ANON_KEY_HERE') {
+      // 如果有預設設定，直接使用
+      localStorage.setItem('supabase_url', defaultUrl);
+      localStorage.setItem('supabase_key', defaultKey);
+      initSupabase(defaultUrl, defaultKey);
+      setupModal.classList.add('hidden');
+      loginPage.classList.remove('hidden');
+      checkAutoLogin();
+    } else {
+      // 沒有預設設定，顯示設定畫面
+      setupModal.classList.remove('hidden');
+      loginPage.classList.add('hidden');
+    }
   }
 }
 
