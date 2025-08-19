@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>作業紀錄系統</title>
+<title>作業紀錄系統 - 雲端版</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   body { 
     font-family: sans-serif; 
@@ -32,7 +33,6 @@
     box-sizing: border-box;
   }
   
-  /* 手機響應式設計 */
   @media (max-width: 768px) {
     .main-app {
       padding: 10px 0;
@@ -96,7 +96,6 @@
   button { cursor: pointer; margin: 2px; }
   .grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; margin-bottom: 10px; }
   
-  /* 登入頁面樣式 */
   .login-container {
     max-width: 400px;
     margin: 100px auto;
@@ -170,6 +169,29 @@
     margin-left: 10px;
   }
   
+  .sync-status {
+    display: inline-block;
+    margin-left: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  
+  .sync-status.synced {
+    background: #d4edda;
+    color: #155724;
+  }
+  
+  .sync-status.syncing {
+    background: #fff3cd;
+    color: #856404;
+  }
+  
+  .sync-status.error {
+    background: #f8d7da;
+    color: #721c24;
+  }
+  
   .modal {
     position: fixed;
     top: 0;
@@ -222,6 +244,12 @@
     background: #f8d7da;
     color: #721c24;
     border: 1px solid #f5c6cb;
+  }
+  
+  .info {
+    background: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
   }
   
   .loading {
@@ -277,13 +305,129 @@
     border: none;
     border-radius: 3px;
   }
+  
+  .setup-instructions {
+    background: #fffbeb;
+    border: 1px solid #fbbf24;
+    border-radius: 4px;
+    padding: 15px;
+    margin: 10px 0;
+  }
+  
+  .setup-instructions h3 {
+    color: #92400e;
+    margin-top: 0;
+  }
+  
+  .setup-instructions pre {
+    background: #f5f5f5;
+    padding: 10px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 12px;
+  }
+  
+  .copy-btn {
+    background: #10b981;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-left: 10px;
+  }
+  
+  .copy-btn:hover {
+    background: #059669;
+  }
 </style>
 </head>
 <body>
 
+<!-- 設定說明 -->
+<div id="setup-modal" class="modal">
+  <div class="modal-content">
+    <h2>設定 Supabase 後端</h2>
+    <div class="setup-instructions">
+      <h3>請按照以下步驟設定：</h3>
+      <ol>
+        <li>前往 <a href="https://supabase.com" target="_blank">Supabase.com</a> 註冊免費帳號</li>
+        <li>建立新專案（New Project）</li>
+        <li>在 SQL Editor 中執行以下指令：
+          <button class="copy-btn" onclick="copySQLToClipboard()">複製 SQL</button>
+          <pre id="sql-code">-- 建立用戶表
+CREATE TABLE IF NOT EXISTS users (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL,
+  is_admin BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 建立作業資料表
+CREATE TABLE IF NOT EXISTS homework_data (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  data JSONB NOT NULL,
+  updated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(user_id)
+);
+
+-- 建立索引
+CREATE INDEX IF NOT EXISTS idx_homework_user ON homework_data(user_id);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+
+-- 啟用 RLS (如果還沒啟用)
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE homework_data ENABLE ROW LEVEL SECURITY;
+
+-- 刪除舊政策（如果存在）
+DROP POLICY IF EXISTS "Users can read own data" ON users;
+DROP POLICY IF EXISTS "Users can insert own data" ON users;
+DROP POLICY IF EXISTS "Users can update own data" ON users;
+DROP POLICY IF EXISTS "Homework data access" ON homework_data;
+
+-- 建立新的 RLS 政策
+CREATE POLICY "Users can read own data" ON users
+  FOR SELECT USING (true);
+
+CREATE POLICY "Users can insert own data" ON users
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Users can update own data" ON users
+  FOR UPDATE USING (true);
+
+CREATE POLICY "Homework data access" ON homework_data
+  FOR ALL USING (true);</pre>
+        </li>
+        <li>在 Settings → API 中找到：
+          <ul>
+            <li><strong>Project URL</strong>（格式：https://xxxxx.supabase.co）</li>
+            <li><strong>anon public key</strong>（很長的一串文字）</li>
+          </ul>
+        </li>
+        <li>將這兩個值填入下方：</li>
+      </ol>
+      <div style="margin-top: 20px;">
+        <input type="text" id="supabase-url" placeholder="輸入你的 Supabase URL (https://xxxxx.supabase.co)" style="width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+        <input type="text" id="supabase-key" placeholder="輸入你的 Supabase Anon Key (很長的一串文字)" style="width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+        <button onclick="testConnection()" style="width: 100%; padding: 12px; background: #10b981; color: white; border: none; border-radius: 4px; font-size: 16px; margin-top: 5px;">
+          測試連線
+        </button>
+        <button onclick="saveSupabaseConfig()" style="width: 100%; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; font-size: 16px; margin-top: 5px;">
+          儲存設定並開始使用
+        </button>
+      </div>
+      <div id="setup-message"></div>
+    </div>
+  </div>
+</div>
+
 <!-- 登入頁面 -->
-<div id="login-page" class="login-container login-page">
+<div id="login-page" class="login-container login-page hidden">
   <h2>作業紀錄系統</h2>
+  <p style="color: #666; margin-bottom: 20px; font-size: 14px;">雲端同步版本</p>
   
   <div class="tab-buttons">
     <div class="tab-button active" onclick="switchTab('login')">登入</div>
@@ -313,6 +457,7 @@
   <div class="main-content">
     <div class="user-info">
       歡迎，<span id="current-user"></span>
+      <span id="sync-status" class="sync-status synced">已同步</span>
       <span id="admin-badge" class="hidden" style="color: #dc2626; font-weight: bold; margin-left: 10px;">管理員</span>
       <button class="logout-btn" onclick="logout()">登出</button>
     </div>
@@ -372,99 +517,20 @@
 </div>
 
 <script>
-// 儲存 API
-class CloudStorage {
-  constructor() {
-    this.endpoint = 'https://api.jsonbin.io/v3/b';
-    this.apiKey = 'demo-key';
-  }
-
-  async saveData(username, userData) {
-    try {
-      const cloudKey = `homework_cloud_${username}`;
-      const dataWithTimestamp = {
-        ...userData,
-        lastSync: new Date().toISOString(),
-        syncId: Date.now()
-      };
-      
-      localStorage.setItem(cloudKey, JSON.stringify(dataWithTimestamp));
-      
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      if (typeof BroadcastChannel !== 'undefined') {
-        const channel = new BroadcastChannel('homework_sync');
-        channel.postMessage({
-          type: 'data_update',
-          username: username,
-          data: dataWithTimestamp
-        });
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('儲存錯誤:', error);
-      return false;
-    }
-  }
-
-  async loadData(username) {
-    try {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      const cloudKey = `homework_cloud_${username}`;
-      const data = localStorage.getItem(cloudKey);
-      
-      return data ? JSON.parse(data) : null;
-    } catch (error) {
-      console.error('載入錯誤:', error);
-      return null;
-    }
-  }
-
-  async getUserList() {
-    try {
-      const authData = localStorage.getItem('homework_auth_cloud') || '{}';
-      return JSON.parse(authData);
-    } catch (error) {
-      return {};
-    }
-  }
-
-  async saveAuth(username, password) {
-    try {
-      const authData = localStorage.getItem('homework_auth_cloud') || '{}';
-      const auth = JSON.parse(authData);
-      auth[username] = {
-        password: password,
-        createdAt: new Date().toISOString()
-      };
-      localStorage.setItem('homework_auth_cloud', JSON.stringify(auth));
-      return true;
-    } catch (error) {
-      return false;
-    }
-  }
-
-  async checkAuth(username, password) {
-    try {
-      const authData = localStorage.getItem('homework_auth_cloud') || '{}';
-      const auth = JSON.parse(authData);
-      return auth[username] && auth[username].password === password;
-    } catch (error) {
-      return false;
-    }
-  }
-}
-
-// 全域變數
-const cloudStorage = new CloudStorage();
+// Supabase 配置
+let supabase = null;
 let currentUser = null;
+let currentUserId = null;
 let classes = [];
 let activeClassId = null;
 let sortOrder = 'new';
+const selectedNumbers = new Set();
+let editingTaskId = null;
+const editSelectedNumbers = new Set();
+let syncInterval = null;
 
 // DOM 元素
+const setupModal = document.getElementById('setup-modal');
 const loginPage = document.getElementById('login-page');
 const mainApp = document.getElementById('main-app');
 const currentUserSpan = document.getElementById('current-user');
@@ -473,68 +539,148 @@ const titleInput = document.getElementById('title');
 const numbersDiv = document.getElementById('numbers');
 const tasksDiv = document.getElementById('tasks');
 const statusMessage = document.getElementById('status-message');
-const selectedNumbers = new Set();
-
-// 管理員相關
+const syncStatus = document.getElementById('sync-status');
 const adminBadge = document.getElementById('admin-badge');
 const adminPanel = document.getElementById('admin-panel');
-const adminUsers = ['admin'];
-
-// 編輯模式相關變數
-let editingTaskId = null;
-const editSelectedNumbers = new Set();
 const editModal = document.getElementById('edit-modal');
 const editNumbersDiv = document.getElementById('edit-numbers');
 const editTitleInput = document.getElementById('edit-title');
-
-// 新增班級相關變數
 const addClassModal = document.getElementById('add-class-modal');
 const newClassNameInput = document.getElementById('new-class-name');
 
-// 跨設備同步監聽
-function setupCrossDeviceSync() {
-  if (typeof BroadcastChannel !== 'undefined') {
-    const channel = new BroadcastChannel('homework_sync');
-    channel.onmessage = (event) => {
-      if (event.data.type === 'data_update' && event.data.username === currentUser) {
-        // 靜默重新載入資料
-        loadUserData();
-        render();
+// 複製 SQL 到剪貼簿
+function copySQLToClipboard() {
+  const sqlCode = document.getElementById('sql-code').textContent;
+  navigator.clipboard.writeText(sqlCode).then(() => {
+    showSetupMessage('SQL 已複製到剪貼簿！', false);
+  }).catch(err => {
+    showSetupMessage('複製失敗，請手動複製', true);
+  });
+}
+
+// 顯示設定訊息
+function showSetupMessage(message, isError = false) {
+  const setupMessage = document.getElementById('setup-message');
+  setupMessage.innerHTML = `<div class="status-message ${isError ? 'error' : 'success'}">${message}</div>`;
+  setTimeout(() => {
+    setupMessage.innerHTML = '';
+  }, 3000);
+}
+
+// 初始化 Supabase
+function initSupabase(url, key) {
+  supabase = window.supabase.createClient(url, key);
+}
+
+// 測試連線功能
+async function testConnection() {
+  const url = document.getElementById('supabase-url').value.trim();
+  const key = document.getElementById('supabase-key').value.trim();
+  
+  if (!url || !key) {
+    showSetupMessage('請先填寫 Supabase URL 和 Key', true);
+    return;
+  }
+  
+  const testBtn = event.target;
+  testBtn.innerHTML = '測試中...';
+  testBtn.disabled = true;
+  
+  try {
+    const testSupabase = window.supabase.createClient(url, key);
+    
+    const { data, error } = await testSupabase
+      .from('users')
+      .select('count')
+      .limit(1);
+    
+    if (error) {
+      console.error('測試連線錯誤:', error);
+      
+      if (error.code === '42P01' || (error.message && error.message.includes('relation "users" does not exist'))) {
+        showSetupMessage('連線成功！但表格不存在，請執行上方的 SQL 指令', true);
+      } else if (error.message && error.message.includes('Invalid API key')) {
+        showSetupMessage('API Key 無效！請確認是 anon public key', true);
+      } else {
+        showSetupMessage(`連線失敗：${error.message}`, true);
       }
-    };
+    } else {
+      showSetupMessage('連線成功！資料庫已正確設定', false);
+    }
+  } catch (err) {
+    console.error('測試錯誤:', err);
+    showSetupMessage(`測試失敗：${err.message}`, true);
+  } finally {
+    testBtn.innerHTML = '測試連線';
+    testBtn.disabled = false;
   }
 }
 
-// 保存用戶資料
-async function saveUserData() {
-  if (!currentUser) return;
+// 儲存 Supabase 設定
+async function saveSupabaseConfig() {
+  const url = document.getElementById('supabase-url').value.trim();
+  const key = document.getElementById('supabase-key').value.trim();
   
-  const userData = {
-    classes: classes,
-    activeClassId: activeClassId,
-    sortOrder: sortOrder,
-    lastUpdate: new Date().toISOString()
-  };
+  if (!url || !key) {
+    showSetupMessage('請填寫所有欄位', true);
+    return;
+  }
   
-  await cloudStorage.saveData(currentUser, userData);
+  localStorage.setItem('supabase_url', url);
+  localStorage.setItem('supabase_key', key);
+  
+  initSupabase(url, key);
+  setupModal.classList.add('hidden');
+  loginPage.classList.remove('hidden');
 }
 
-// 載入用戶資料
-async function loadUserData() {
-  if (!currentUser) return;
+// 檢查並載入 Supabase 設定
+function checkSupabaseConfig() {
+  const url = localStorage.getItem('supabase_url');
+  const key = localStorage.getItem('supabase_key');
   
-  const userData = await cloudStorage.loadData(currentUser);
-  
-  if (userData) {
-    classes = userData.classes || [{ id: Date.now(), name: '班級一', tasks: [] }];
-    activeClassId = userData.activeClassId || classes[0].id;
-    sortOrder = userData.sortOrder || 'new';
+  if (url && key) {
+    initSupabase(url, key);
+    setupModal.classList.add('hidden');
+    loginPage.classList.remove('hidden');
+    checkAutoLogin();
   } else {
-    classes = [{ id: Date.now(), name: '班級一', tasks: [] }];
-    activeClassId = classes[0].id;
-    sortOrder = 'new';
-    await saveUserData();
+    setupModal.classList.remove('hidden');
+    loginPage.classList.add('hidden');
   }
+}
+
+// 更新同步狀態
+function updateSyncStatus(status) {
+  syncStatus.className = 'sync-status ' + status;
+  switch(status) {
+    case 'synced':
+      syncStatus.textContent = '已同步';
+      break;
+    case 'syncing':
+      syncStatus.textContent = '同步中...';
+      break;
+    case 'error':
+      syncStatus.textContent = '同步失敗';
+      break;
+  }
+}
+
+// 顯示狀態訊息
+function showStatus(message, isError = false) {
+  statusMessage.innerHTML = `<div class="status-message ${isError ? 'error' : 'success'}">${message}</div>`;
+  setTimeout(() => {
+    statusMessage.innerHTML = '';
+  }, 3000);
+}
+
+// 顯示認證訊息
+function showAuthMessage(message, isError = false) {
+  const authMessage = document.getElementById('auth-message');
+  authMessage.innerHTML = `<div class="status-message ${isError ? 'error' : 'success'}">${message}</div>`;
+  setTimeout(() => {
+    authMessage.innerHTML = '';
+  }, 3000);
 }
 
 // 切換登入/註冊頁籤
@@ -555,29 +701,7 @@ function switchTab(tab) {
     tabButtons[1].classList.add('active');
   }
   
-  clearAuthMessage();
-}
-
-// 顯示認證訊息
-function showAuthMessage(message, isError = false) {
-  const authMessage = document.getElementById('auth-message');
-  authMessage.innerHTML = `<div class="status-message ${isError ? 'error' : 'success'}">${message}</div>`;
-  setTimeout(() => {
-    authMessage.innerHTML = '';
-  }, 3000);
-}
-
-// 清除認證訊息
-function clearAuthMessage() {
   document.getElementById('auth-message').innerHTML = '';
-}
-
-// 顯示狀態訊息
-function showStatus(message, isError = false) {
-  statusMessage.innerHTML = `<div class="status-message ${isError ? 'error' : 'success'}">${message}</div>`;
-  setTimeout(() => {
-    statusMessage.innerHTML = '';
-  }, 3000);
 }
 
 // 註冊功能
@@ -597,36 +721,79 @@ async function register() {
     return;
   }
   
+  if (password.length < 6) {
+    showAuthMessage('密碼至少需要6個字元', true);
+    return;
+  }
+  
   registerBtn.innerHTML = '<div class="loading"></div> 註冊中...';
   registerBtn.disabled = true;
   
   try {
-    const existingUser = await cloudStorage.loadData(username);
-    if (existingUser) {
+    // 檢查用戶是否已存在
+    const { data: existingUsers, error: checkError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('username', username);
+    
+    if (checkError) {
+      console.error('檢查用戶錯誤:', checkError);
+      showAuthMessage('資料庫錯誤，請確認已執行 SQL 設定', true);
+      return;
+    }
+    
+    if (existingUsers && existingUsers.length > 0) {
       showAuthMessage('用戶名稱已存在', true);
       return;
     }
     
-    await cloudStorage.saveAuth(username, password);
+    // 建立新用戶
+    const { data: newUser, error: insertError } = await supabase
+      .from('users')
+      .insert([
+        { 
+          username: username, 
+          password: password,
+          is_admin: username === 'admin'
+        }
+      ])
+      .select()
+      .single();
     
+    if (insertError) {
+      console.error('建立用戶錯誤:', insertError);
+      showAuthMessage(`註冊失敗: ${insertError.message}`, true);
+      return;
+    }
+    
+    // 建立初始資料
     const initialData = {
       classes: [{ id: Date.now(), name: '班級一', tasks: [] }],
       activeClassId: null,
-      sortOrder: 'new',
-      createdAt: new Date().toISOString()
+      sortOrder: 'new'
     };
     initialData.activeClassId = initialData.classes[0].id;
     
-    await cloudStorage.saveData(username, initialData);
+    await supabase
+      .from('homework_data')
+      .insert([
+        {
+          user_id: newUser.id,
+          data: initialData
+        }
+      ]);
     
     showAuthMessage('註冊成功！請登入');
     
+    // 清空表單
     document.getElementById('register-username').value = '';
     document.getElementById('register-password').value = '';
     document.getElementById('register-confirm').value = '';
+    
     setTimeout(() => switchTab('login'), 1500);
     
   } catch (error) {
+    console.error('註冊錯誤:', error);
     showAuthMessage('註冊失敗，請稍後重試', true);
   } finally {
     registerBtn.innerHTML = '註冊';
@@ -649,19 +816,34 @@ async function login() {
   loginBtn.disabled = true;
   
   try {
-    const isValid = await cloudStorage.checkAuth(username, password);
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .eq('password', password);
     
-    if (!isValid) {
+    if (error || !users || users.length === 0) {
       showAuthMessage('用戶名稱或密碼錯誤', true);
+      loginBtn.innerHTML = '登入';
+      loginBtn.disabled = false;
       return;
     }
     
+    const user = users[0];
     currentUser = username;
-    localStorage.setItem('homework_current_user_cloud', currentUser);
+    currentUserId = user.id;
+    
+    localStorage.setItem('homework_user', JSON.stringify({
+      username: username,
+      userId: user.id,
+      isAdmin: user.is_admin || false
+    }));
+    
     await loadUserData();
-    showMainApp();
+    showMainApp(user.is_admin || false);
     
   } catch (error) {
+    console.error('登入錯誤:', error);
     showAuthMessage('登入失敗，請檢查網路連線', true);
   } finally {
     loginBtn.innerHTML = '登入';
@@ -669,11 +851,19 @@ async function login() {
   }
 }
 
+// 其他功能保持不變...
 // 登出功能
 async function logout() {
   await saveUserData();
+  
+  if (syncInterval) {
+    clearInterval(syncInterval);
+    syncInterval = null;
+  }
+  
   currentUser = null;
-  localStorage.removeItem('homework_current_user_cloud');
+  currentUserId = null;
+  localStorage.removeItem('homework_user');
   classes = [];
   activeClassId = null;
   selectedNumbers.clear();
@@ -684,13 +874,112 @@ async function logout() {
   showLoginPage();
 }
 
+// 自動登入檢查
+async function checkAutoLogin() {
+  const savedUser = localStorage.getItem('homework_user');
+  if (savedUser) {
+    const userData = JSON.parse(savedUser);
+    currentUser = userData.username;
+    currentUserId = userData.userId;
+    
+    try {
+      const { data: user } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', currentUserId)
+        .single();
+      
+      if (user) {
+        await loadUserData();
+        showMainApp(userData.isAdmin);
+      } else {
+        localStorage.removeItem('homework_user');
+        showLoginPage();
+      }
+    } catch (error) {
+      localStorage.removeItem('homework_user');
+      showLoginPage();
+    }
+  }
+}
+
+// 載入用戶資料
+async function loadUserData() {
+  if (!currentUserId) return;
+  
+  updateSyncStatus('syncing');
+  
+  try {
+    const { data, error } = await supabase
+      .from('homework_data')
+      .select('data')
+      .eq('user_id', currentUserId)
+      .single();
+    
+    if (error) {
+      if (error.code === 'PGRST116') {
+        classes = [{ id: Date.now(), name: '班級一', tasks: [] }];
+        activeClassId = classes[0].id;
+        sortOrder = 'new';
+        await saveUserData();
+      } else {
+        throw error;
+      }
+    } else if (data && data.data) {
+      classes = data.data.classes || [];
+      activeClassId = data.data.activeClassId || (classes[0]?.id);
+      sortOrder = data.data.sortOrder || 'new';
+    }
+    
+    updateSyncStatus('synced');
+  } catch (error) {
+    console.error('載入資料錯誤:', error);
+    updateSyncStatus('error');
+  }
+}
+
+// 保存用戶資料
+async function saveUserData() {
+  if (!currentUserId) return;
+  
+  updateSyncStatus('syncing');
+  
+  const userData = {
+    classes: classes,
+    activeClassId: activeClassId,
+    sortOrder: sortOrder
+  };
+  
+  try {
+    const { error } = await supabase
+      .from('homework_data')
+      .upsert([
+        {
+          user_id: currentUserId,
+          data: userData,
+          updated_at: new Date().toISOString()
+        }
+      ], {
+        onConflict: 'user_id'
+      });
+    
+    if (error) throw error;
+    
+    updateSyncStatus('synced');
+  } catch (error) {
+    console.error('儲存資料錯誤:', error);
+    updateSyncStatus('error');
+    showStatus('同步失敗，資料暫存在本地', true);
+  }
+}
+
 // 顯示主應用程式
-function showMainApp() {
+function showMainApp(isAdmin = false) {
   loginPage.classList.add('hidden');
   mainApp.classList.remove('hidden');
   currentUserSpan.textContent = currentUser;
   
-  if (adminUsers.includes(currentUser)) {
+  if (isAdmin) {
     adminBadge.classList.remove('hidden');
     adminPanel.classList.remove('hidden');
   } else {
@@ -700,13 +989,18 @@ function showMainApp() {
   
   setupEventListeners();
   render();
+  
+  syncInterval = setInterval(async () => {
+    await loadUserData();
+    render();
+  }, 30000);
 }
 
 // 顯示登入頁面
 function showLoginPage() {
   mainApp.classList.add('hidden');
   loginPage.classList.remove('hidden');
-  clearAuthMessage();
+  document.getElementById('auth-message').innerHTML = '';
 }
 
 // 設置事件監聽器
@@ -724,7 +1018,7 @@ function setupEventListeners() {
   }
 
   if (deleteClassBtn) {
-    deleteClassBtn.onclick = () => {
+    deleteClassBtn.onclick = async () => {
       if (classes.length <= 1) {
         showStatus('至少需要保留一個班級', true);
         return;
@@ -735,13 +1029,13 @@ function setupEventListeners() {
       activeClassId = classes[0].id;
       selectedNumbers.clear();
       render();
-      saveUserData();
+      await saveUserData();
       showStatus(`已刪除班級：${deletedClass.name}`);
     };
   }
 
   if (addTaskBtn) {
-    addTaskBtn.onclick = () => {
+    addTaskBtn.onclick = async () => {
       const title = titleInput.value.trim();
       if (!title) {
         showStatus('請輸入作業標題', true);
@@ -758,24 +1052,24 @@ function setupEventListeners() {
       titleInput.value = '';
       selectedNumbers.clear();
       render();
-      saveUserData();
+      await saveUserData();
       showStatus('作業已新增');
     };
   }
 
   if (sortNewBtn) {
-    sortNewBtn.onclick = () => { 
+    sortNewBtn.onclick = async () => { 
       sortOrder = 'new'; 
       renderTasks(); 
-      saveUserData();
+      await saveUserData();
     };
   }
   
   if (sortOldBtn) {
-    sortOldBtn.onclick = () => { 
+    sortOldBtn.onclick = async () => { 
       sortOrder = 'old'; 
       renderTasks(); 
-      saveUserData();
+      await saveUserData();
     };
   }
 }
@@ -832,11 +1126,11 @@ function renderClasses() {
       btn.classList.add('active');
     }
     
-    btn.onclick = () => { 
+    btn.onclick = async () => { 
       activeClassId = c.id; 
       selectedNumbers.clear();
       render(); 
-      saveUserData();
+      await saveUserData();
     };
     
     classButtons.appendChild(btn);
@@ -977,60 +1271,80 @@ function render() {
 
 // 管理員功能：查看所有用戶
 async function showAllUsers() {
-  const users = await cloudStorage.getUserList();
-  const adminInfo = document.getElementById('admin-info');
-  
-  let html = '<h4>所有註冊用戶：</h4><ul>';
-  for (const username in users) {
-    const userData = await cloudStorage.loadData(username);
-    const taskCount = userData ? userData.classes.reduce((sum, cls) => sum + cls.tasks.length, 0) : 0;
-    html += `<li>${username} - ${taskCount} 項作業記錄</li>`;
+  try {
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, username, created_at, is_admin');
+    
+    if (error) throw error;
+    
+    const adminInfo = document.getElementById('admin-info');
+    
+    let html = '<h4>所有註冊用戶：</h4><ul>';
+    for (const user of users) {
+      const { data: homework } = await supabase
+        .from('homework_data')
+        .select('data')
+        .eq('user_id', user.id)
+        .single();
+      
+      const taskCount = homework?.data?.classes?.reduce((sum, cls) => sum + cls.tasks.length, 0) || 0;
+      const adminTag = user.is_admin ? ' (管理員)' : '';
+      html += `<li>${user.username}${adminTag} - ${taskCount} 項作業記錄</li>`;
+    }
+    html += '</ul>';
+    
+    adminInfo.innerHTML = html;
+  } catch (error) {
+    console.error('載入用戶錯誤:', error);
+    showStatus('載入用戶資料失敗', true);
   }
-  html += '</ul>';
-  
-  adminInfo.innerHTML = html;
 }
 
 // 管理員功能：匯出全部資料
 async function exportAllData() {
-  const users = await cloudStorage.getUserList();
-  const allData = {};
-  
-  for (const username in users) {
-    const userData = await cloudStorage.loadData(username);
-    if (userData) {
-      allData[username] = userData;
-    }
+  try {
+    const { data: users } = await supabase
+      .from('users')
+      .select('*');
+    
+    const { data: homeworkData } = await supabase
+      .from('homework_data')
+      .select('*');
+    
+    const exportData = {
+      users: users,
+      homework_data: homeworkData,
+      export_date: new Date().toISOString()
+    };
+    
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `homework_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    
+    URL.revokeObjectURL(url);
+    showStatus('資料已匯出');
+  } catch (error) {
+    console.error('匯出資料錯誤:', error);
+    showStatus('匯出資料失敗', true);
   }
-  
-  const dataStr = JSON.stringify(allData, null, 2);
-  const dataBlob = new Blob([dataStr], { type: 'application/json' });
-  const url = URL.createObjectURL(dataBlob);
-  
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `homework_data_${new Date().toISOString().split('T')[0]}.json`;
-  a.click();
-  
-  URL.revokeObjectURL(url);
-  showStatus('資料已匯出');
 }
 
 // 初始化應用程式
 async function initApp() {
-  setupCrossDeviceSync();
-  
-  const rememberedUser = localStorage.getItem('homework_current_user_cloud');
-  if (rememberedUser) {
-    currentUser = rememberedUser;
-    await loadUserData();
-    showMainApp();
-  }
+  checkSupabaseConfig();
   
   // Enter 鍵快捷鍵
   document.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
-      if (!loginPage.classList.contains('hidden')) {
+      if (!setupModal.classList.contains('hidden')) {
+        // 不做任何事，避免誤按
+      } else if (!loginPage.classList.contains('hidden')) {
         if (!document.getElementById('login-form').classList.contains('hidden')) {
           login();
         } else {
@@ -1041,6 +1355,21 @@ async function initApp() {
       } else if (!editModal.classList.contains('hidden')) {
         saveEditTask();
       }
+    }
+  });
+  
+  // 當視窗獲得焦點時同步資料
+  window.addEventListener('focus', async () => {
+    if (currentUserId) {
+      await loadUserData();
+      render();
+    }
+  });
+  
+  // 離開頁面前保存資料
+  window.addEventListener('beforeunload', () => {
+    if (currentUserId) {
+      saveUserData();
     }
   });
 }
