@@ -96,6 +96,19 @@
   button { cursor: pointer; margin: 2px; }
   .grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; margin-bottom: 10px; }
   
+  .number-btn {
+    padding: 8px;
+    border: 1px solid #ddd;
+    background: white;
+    transition: background-color 0.2s;
+  }
+  
+  .number-btn.selected {
+    background: #fca5a5 !important;
+    color: white;
+    font-weight: bold;
+  }
+  
   .login-container {
     max-width: 400px;
     margin: 100px auto;
@@ -443,23 +456,27 @@ let editingTaskId = null;
 const editSelectedNumbers = new Set();
 let syncInterval = null;
 
-// DOM 元素
-const loginPage = document.getElementById('login-page');
-const mainApp = document.getElementById('main-app');
-const currentUserSpan = document.getElementById('current-user');
-const classButtons = document.getElementById('class-buttons');
-const titleInput = document.getElementById('title');
-const numbersDiv = document.getElementById('numbers');
-const tasksDiv = document.getElementById('tasks');
-const statusMessage = document.getElementById('status-message');
-const syncStatus = document.getElementById('sync-status');
-const adminBadge = document.getElementById('admin-badge');
-const adminPanel = document.getElementById('admin-panel');
-const editModal = document.getElementById('edit-modal');
-const editNumbersDiv = document.getElementById('edit-numbers');
-const editTitleInput = document.getElementById('edit-title');
-const addClassModal = document.getElementById('add-class-modal');
-const newClassNameInput = document.getElementById('new-class-name');
+// DOM 元素 - 使用函數獲取以避免 null 問題
+function getElements() {
+  return {
+    loginPage: document.getElementById('login-page'),
+    mainApp: document.getElementById('main-app'),
+    currentUserSpan: document.getElementById('current-user'),
+    classButtons: document.getElementById('class-buttons'),
+    titleInput: document.getElementById('title'),
+    numbersDiv: document.getElementById('numbers'),
+    tasksDiv: document.getElementById('tasks'),
+    statusMessage: document.getElementById('status-message'),
+    syncStatus: document.getElementById('sync-status'),
+    adminBadge: document.getElementById('admin-badge'),
+    adminPanel: document.getElementById('admin-panel'),
+    editModal: document.getElementById('edit-modal'),
+    editNumbersDiv: document.getElementById('edit-numbers'),
+    editTitleInput: document.getElementById('edit-title'),
+    addClassModal: document.getElementById('add-class-modal'),
+    newClassNameInput: document.getElementById('new-class-name')
+  };
+}
 
 // 除錯功能
 function debugLog(message, data = null) {
@@ -483,6 +500,9 @@ function debugLog(message, data = null) {
 
 // 更新同步狀態
 function updateSyncStatus(status) {
+  const syncStatus = document.getElementById('sync-status');
+  if (!syncStatus) return;
+  
   syncStatus.className = 'sync-status ' + status;
   switch(status) {
     case 'synced':
@@ -499,6 +519,9 @@ function updateSyncStatus(status) {
 
 // 顯示狀態訊息
 function showStatus(message, isError = false) {
+  const statusMessage = document.getElementById('status-message');
+  if (!statusMessage) return;
+  
   statusMessage.innerHTML = `<div class="status-message ${isError ? 'error' : 'success'}">${message}</div>`;
   setTimeout(() => {
     statusMessage.innerHTML = '';
@@ -508,6 +531,8 @@ function showStatus(message, isError = false) {
 // 顯示認證訊息
 function showAuthMessage(message, isError = false) {
   const authMessage = document.getElementById('auth-message');
+  if (!authMessage) return;
+  
   authMessage.innerHTML = `<div class="status-message ${isError ? 'error' : 'success'}">${message}</div>`;
   setTimeout(() => {
     authMessage.innerHTML = '';
@@ -742,42 +767,6 @@ async function checkAutoLogin() {
   }
 }
 
-// 簡化的合併資料功能
-function mergeData(localData, cloudData) {
-  debugLog('開始合併資料', {
-    本地班級數: localData?.classes?.length || 0,
-    雲端班級數: cloudData?.classes?.length || 0
-  });
-  
-  // 如果沒有雲端資料，返回本地資料
-  if (!cloudData || !cloudData.classes) {
-    return localData?.classes || [];
-  }
-  
-  // 如果沒有本地資料，返回雲端資料
-  if (!localData || !localData.classes) {
-    return cloudData.classes;
-  }
-  
-  // 簡單合併：使用雲端資料為主，僅保留本地新增的資料
-  const mergedClasses = [...cloudData.classes];
-  
-  // 檢查本地是否有新的班級
-  localData.classes.forEach(localClass => {
-    const existingClass = mergedClasses.find(c => c.id === localClass.id);
-    if (!existingClass) {
-      mergedClasses.push(localClass);
-    }
-  });
-  
-  debugLog('合併完成', {
-    合併後班級數: mergedClasses.length,
-    合併後作業總數: mergedClasses.reduce((sum, cls) => sum + (cls.tasks?.length || 0), 0)
-  });
-  
-  return mergedClasses;
-}
-
 // 載入用戶資料
 async function loadUserData() {
   if (!currentUserId) return;
@@ -903,16 +892,18 @@ async function forceSync() {
 
 // 顯示主應用程式
 function showMainApp(isAdmin = false) {
-  loginPage.classList.add('hidden');
-  mainApp.classList.remove('hidden');
-  currentUserSpan.textContent = currentUser;
+  const elements = getElements();
+  
+  elements.loginPage.classList.add('hidden');
+  elements.mainApp.classList.remove('hidden');
+  elements.currentUserSpan.textContent = currentUser;
   
   if (isAdmin) {
-    adminBadge.classList.remove('hidden');
-    adminPanel.classList.remove('hidden');
+    elements.adminBadge.classList.remove('hidden');
+    elements.adminPanel.classList.remove('hidden');
   } else {
-    adminBadge.classList.add('hidden');
-    adminPanel.classList.add('hidden');
+    elements.adminBadge.classList.add('hidden');
+    elements.adminPanel.classList.add('hidden');
   }
   
   setupEventListeners();
@@ -928,8 +919,9 @@ function showMainApp(isAdmin = false) {
 
 // 顯示登入頁面
 function showLoginPage() {
-  mainApp.classList.add('hidden');
-  loginPage.classList.remove('hidden');
+  const elements = getElements();
+  elements.mainApp.classList.add('hidden');
+  elements.loginPage.classList.remove('hidden');
   document.getElementById('auth-message').innerHTML = '';
 }
 
@@ -966,6 +958,7 @@ function setupEventListeners() {
 
   if (addTaskBtn) {
     addTaskBtn.onclick = async () => {
+      const titleInput = document.getElementById('title');
       const title = titleInput.value.trim();
       if (!title) {
         showStatus('請輸入作業標題', true);
@@ -1021,24 +1014,26 @@ function setupEventListeners() {
 
 // 開啟新增班級彈出窗
 function openAddClassModal() {
-  newClassNameInput.value = '';
-  addClassModal.classList.remove('hidden');
-  newClassNameInput.focus();
+  const elements = getElements();
+  elements.newClassNameInput.value = '';
+  elements.addClassModal.classList.remove('hidden');
+  elements.newClassNameInput.focus();
 }
 
 // 保存新班級
 async function saveNewClass() {
-  const name = newClassNameInput.value.trim();
+  const elements = getElements();
+  const name = elements.newClassNameInput.value.trim();
   if (!name) {
     showStatus('請輸入班級名稱', true);
-    newClassNameInput.focus();
+    elements.newClassNameInput.focus();
     return;
   }
   
   const existingNames = classes.map(c => c.name);
   if (existingNames.includes(name)) {
     showStatus('班級名稱已存在', true);
-    newClassNameInput.focus();
+    elements.newClassNameInput.focus();
     return;
   }
   
@@ -1050,16 +1045,20 @@ async function saveNewClass() {
   await saveUserData();
   showStatus(`已新增班級：${name}`);
   
-  addClassModal.classList.add('hidden');
+  elements.addClassModal.classList.add('hidden');
 }
 
 // 取消新增班級
 function cancelNewClass() {
-  addClassModal.classList.add('hidden');
+  const elements = getElements();
+  elements.addClassModal.classList.add('hidden');
 }
 
 // 渲染班級按鈕
 function renderClasses() {
+  const classButtons = document.getElementById('class-buttons');
+  if (!classButtons) return;
+  
   classButtons.innerHTML = '';
   classes.forEach(c => {
     const btn = document.createElement('button');
@@ -1082,38 +1081,82 @@ function renderClasses() {
   });
 }
 
-// 渲染座號選擇器
+// 渲染座號選擇器 - 修復版本
 function renderNumbers() {
+  const numbersDiv = document.getElementById('numbers');
+  if (!numbersDiv) return;
+  
   numbersDiv.innerHTML = '';
   for (let i = 1; i <= 40; i++) {
     const btn = document.createElement('button');
     btn.textContent = i;
-    if (selectedNumbers.has(i)) btn.style.background = '#fca5a5';
-    btn.onclick = () => { 
-      selectedNumbers.has(i) ? selectedNumbers.delete(i) : selectedNumbers.add(i); 
-      renderNumbers(); 
+    btn.className = 'number-btn';
+    
+    // 檢查是否已選擇
+    if (selectedNumbers.has(i)) {
+      btn.classList.add('selected');
+    }
+    
+    // 點擊事件 - 修復重點
+    btn.onclick = (e) => { 
+      e.preventDefault();
+      e.stopPropagation();
+      
+      if (selectedNumbers.has(i)) {
+        selectedNumbers.delete(i);
+        btn.classList.remove('selected');
+      } else {
+        selectedNumbers.add(i);
+        btn.classList.add('selected');
+      }
+      
+      // 不重新渲染整個區塊，只更新按鈕狀態
+      debugLog(`選擇號碼 ${i}`, { 已選擇: [...selectedNumbers] });
     };
+    
     numbersDiv.appendChild(btn);
   }
 }
 
-// 渲染編輯模式的座號選擇器
+// 渲染編輯模式的座號選擇器 - 修復版本
 function renderEditNumbers() {
+  const editNumbersDiv = document.getElementById('edit-numbers');
+  if (!editNumbersDiv) return;
+  
   editNumbersDiv.innerHTML = '';
   for (let i = 1; i <= 40; i++) {
     const btn = document.createElement('button');
     btn.textContent = i;
-    if (editSelectedNumbers.has(i)) btn.style.background = '#fca5a5';
-    btn.onclick = () => { 
-      editSelectedNumbers.has(i) ? editSelectedNumbers.delete(i) : editSelectedNumbers.add(i); 
-      renderEditNumbers(); 
+    btn.className = 'number-btn';
+    
+    if (editSelectedNumbers.has(i)) {
+      btn.classList.add('selected');
+    }
+    
+    btn.onclick = (e) => { 
+      e.preventDefault();
+      e.stopPropagation();
+      
+      if (editSelectedNumbers.has(i)) {
+        editSelectedNumbers.delete(i);
+        btn.classList.remove('selected');
+      } else {
+        editSelectedNumbers.add(i);
+        btn.classList.add('selected');
+      }
+      
+      debugLog(`編輯模式選擇號碼 ${i}`, { 已選擇: [...editSelectedNumbers] });
     };
+    
     editNumbersDiv.appendChild(btn);
   }
 }
 
 // 渲染作業列表
 function renderTasks() {
+  const tasksDiv = document.getElementById('tasks');
+  if (!tasksDiv) return;
+  
   const cls = classes.find(c => c.id === activeClassId);
   if (!cls || !cls.tasks) {
     tasksDiv.innerHTML = '<p style="color: #666;">尚無作業記錄</p>';
@@ -1165,15 +1208,16 @@ function openEditTask(taskId) {
   
   if (!task) return;
   
+  const elements = getElements();
   editingTaskId = taskId;
-  editTitleInput.value = task.title;
+  elements.editTitleInput.value = task.title;
   editSelectedNumbers.clear();
   if (task.numbers) {
     task.numbers.forEach(n => editSelectedNumbers.add(n));
   }
   
   renderEditNumbers();
-  editModal.classList.remove('hidden');
+  elements.editModal.classList.remove('hidden');
 }
 
 // 保存編輯的作業
@@ -1183,7 +1227,8 @@ async function saveEditTask() {
   
   if (!task) return;
   
-  const newTitle = editTitleInput.value.trim();
+  const elements = getElements();
+  const newTitle = elements.editTitleInput.value.trim();
   const newNumbers = [...editSelectedNumbers].sort((a, b) => a - b);
   
   debugLog('編輯作業', {
@@ -1200,14 +1245,15 @@ async function saveEditTask() {
   await saveUserData();
   showStatus('作業已更新並同步');
   
-  editModal.classList.add('hidden');
+  elements.editModal.classList.add('hidden');
   editingTaskId = null;
   editSelectedNumbers.clear();
 }
 
 // 取消編輯
 function cancelEditTask() {
-  editModal.classList.add('hidden');
+  const elements = getElements();
+  elements.editModal.classList.add('hidden');
   editingTaskId = null;
   editSelectedNumbers.clear();
 }
@@ -1318,15 +1364,16 @@ async function initApp() {
   // Enter 鍵快捷鍵
   document.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
-      if (!loginPage.classList.contains('hidden')) {
+      const elements = getElements();
+      if (!elements.loginPage.classList.contains('hidden')) {
         if (!document.getElementById('login-form').classList.contains('hidden')) {
           login();
         } else {
           register();
         }
-      } else if (!addClassModal.classList.contains('hidden')) {
+      } else if (!elements.addClassModal.classList.contains('hidden')) {
         saveNewClass();
-      } else if (!editModal.classList.contains('hidden')) {
+      } else if (!elements.editModal.classList.contains('hidden')) {
         saveEditTask();
       }
     }
