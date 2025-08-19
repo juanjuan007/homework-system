@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>作業紀錄系統 - 雲端版</title>
+<title>作業紀錄系統</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   body { 
@@ -305,131 +305,12 @@
     border: none;
     border-radius: 3px;
   }
-  
-  .setup-instructions {
-    background: #fffbeb;
-    border: 1px solid #fbbf24;
-    border-radius: 4px;
-    padding: 15px;
-    margin: 10px 0;
-  }
-  
-  .setup-instructions h3 {
-    color: #92400e;
-    margin-top: 0;
-  }
-  
-  .setup-instructions pre {
-    background: #f5f5f5;
-    padding: 10px;
-    border-radius: 4px;
-    overflow-x: auto;
-    font-size: 12px;
-  }
-  
-  .copy-btn {
-    background: #10b981;
-    color: white;
-    border: none;
-    padding: 5px 10px;
-    border-radius: 3px;
-    font-size: 12px;
-    cursor: pointer;
-    margin-left: 10px;
-  }
-  
-  .copy-btn:hover {
-    background: #059669;
-  }
 </style>
 </head>
 <body>
 
-<!-- 設定說明 -->
-<div id="setup-modal" class="modal">
-  <div class="modal-content">
-    <h2>設定 Supabase 後端</h2>
-    <div class="setup-instructions">
-      <h3>請按照以下步驟設定：</h3>
-      <ol>
-        <li>前往 <a href="https://supabase.com" target="_blank">Supabase.com</a> 註冊免費帳號</li>
-        <li>建立新專案（New Project）</li>
-        <li>在 SQL Editor 中執行以下指令：
-          <button class="copy-btn" onclick="copySQLToClipboard()">複製 SQL</button>
-          <pre id="sql-code">-- 建立用戶表
-CREATE TABLE IF NOT EXISTS users (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  username TEXT UNIQUE NOT NULL,
-  password TEXT NOT NULL,
-  is_admin BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- 建立作業資料表
-CREATE TABLE IF NOT EXISTS homework_data (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  data JSONB NOT NULL,
-  updated_at TIMESTAMP DEFAULT NOW(),
-  UNIQUE(user_id)
-);
-
--- 建立索引
-CREATE INDEX IF NOT EXISTS idx_homework_user ON homework_data(user_id);
-CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-
--- 啟用 RLS (如果還沒啟用)
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE homework_data ENABLE ROW LEVEL SECURITY;
-
--- 刪除舊政策（如果存在）
-DROP POLICY IF EXISTS "Users can read own data" ON users;
-DROP POLICY IF EXISTS "Users can insert own data" ON users;
-DROP POLICY IF EXISTS "Users can update own data" ON users;
-DROP POLICY IF EXISTS "Homework data access" ON homework_data;
-
--- 建立新的 RLS 政策
-CREATE POLICY "Users can read own data" ON users
-  FOR SELECT USING (true);
-
-CREATE POLICY "Users can insert own data" ON users
-  FOR INSERT WITH CHECK (true);
-
-CREATE POLICY "Users can update own data" ON users
-  FOR UPDATE USING (true);
-
-CREATE POLICY "Homework data access" ON homework_data
-  FOR ALL USING (true);</pre>
-        </li>
-        <li>在 Settings → API 中找到：
-          <ul>
-            <li><strong>Project URL</strong>（格式：https://xxxxx.supabase.co）</li>
-            <li><strong>anon public key</strong>（很長的一串文字）</li>
-          </ul>
-        </li>
-        <li>將這兩個值填入下方：</li>
-      </ol>
-      <div style="margin-top: 20px;">
-        <input type="text" id="supabase-url" placeholder="輸入你的 Supabase URL (https://xxxxx.supabase.co)" style="width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
-        <input type="text" id="supabase-key" placeholder="輸入你的 Supabase Anon Key (很長的一串文字)" style="width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
-        <button onclick="testConnection()" style="width: 100%; padding: 12px; background: #10b981; color: white; border: none; border-radius: 4px; font-size: 16px; margin-top: 5px;">
-          測試連線
-        </button>
-        <button onclick="saveSupabaseConfig()" style="width: 100%; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; font-size: 16px; margin-top: 5px;">
-          儲存設定並開始使用
-        </button>
-        <hr style="margin: 20px 0;">
-        <p style="text-align: center; color: #666; font-size: 14px;">
-          💡 提示：設定一次後就會永久記住，不需要每次都設定
-        </p>
-      </div>
-      <div id="setup-message"></div>
-    </div>
-  </div>
-</div>
-
 <!-- 登入頁面 -->
-<div id="login-page" class="login-container login-page hidden">
+<div id="login-page" class="login-container login-page">
   <h2>作業紀錄系統</h2>
   <p style="color: #666; margin-bottom: 20px; font-size: 14px;">雲端同步版本</p>
   
@@ -454,6 +335,7 @@ CREATE POLICY "Homework data access" ON homework_data
   </div>
   
   <div id="auth-message"></div>
+
 </div>
 
 <!-- 主應用程式 -->
@@ -521,8 +403,24 @@ CREATE POLICY "Homework data access" ON homework_data
 </div>
 
 <script>
-// Supabase 配置
-let supabase = null;
+// ====================================
+// ✅ Supabase 設定 - 已配置完成！
+// ====================================
+const SUPABASE_URL = 'https://qlehgwrggsrcqtcrokth.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsZWhnd3JnZ3NyY3F0Y3Jva3RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1OTg5NzYsImV4cCI6MjA3MTE3NDk3Nn0.7DJcIJnTtuYy3dE1LcXziHmNvbRU2olOFsu0-lkhBzQ';
+
+// ====================================
+// 如何取得上述資料：
+// 1. 登入 Supabase 
+// 2. 進入您的專案
+// 3. 點擊左側 Settings → API
+// 4. 複製 Project URL 和 anon public key
+// ====================================
+
+// 初始化 Supabase
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// 全域變數
 let currentUser = null;
 let currentUserId = null;
 let classes = [];
@@ -534,7 +432,6 @@ const editSelectedNumbers = new Set();
 let syncInterval = null;
 
 // DOM 元素
-const setupModal = document.getElementById('setup-modal');
 const loginPage = document.getElementById('login-page');
 const mainApp = document.getElementById('main-app');
 const currentUserSpan = document.getElementById('current-user');
@@ -551,123 +448,6 @@ const editNumbersDiv = document.getElementById('edit-numbers');
 const editTitleInput = document.getElementById('edit-title');
 const addClassModal = document.getElementById('add-class-modal');
 const newClassNameInput = document.getElementById('new-class-name');
-
-// 複製 SQL 到剪貼簿
-function copySQLToClipboard() {
-  const sqlCode = document.getElementById('sql-code').textContent;
-  navigator.clipboard.writeText(sqlCode).then(() => {
-    showSetupMessage('SQL 已複製到剪貼簿！', false);
-  }).catch(err => {
-    showSetupMessage('複製失敗，請手動複製', true);
-  });
-}
-
-// 顯示設定訊息
-function showSetupMessage(message, isError = false) {
-  const setupMessage = document.getElementById('setup-message');
-  setupMessage.innerHTML = `<div class="status-message ${isError ? 'error' : 'success'}">${message}</div>`;
-  setTimeout(() => {
-    setupMessage.innerHTML = '';
-  }, 3000);
-}
-
-// 初始化 Supabase
-function initSupabase(url, key) {
-  supabase = window.supabase.createClient(url, key);
-}
-
-// 測試連線功能
-async function testConnection() {
-  const url = document.getElementById('supabase-url').value.trim();
-  const key = document.getElementById('supabase-key').value.trim();
-  
-  if (!url || !key) {
-    showSetupMessage('請先填寫 Supabase URL 和 Key', true);
-    return;
-  }
-  
-  const testBtn = event.target;
-  testBtn.innerHTML = '測試中...';
-  testBtn.disabled = true;
-  
-  try {
-    const testSupabase = window.supabase.createClient(url, key);
-    
-    const { data, error } = await testSupabase
-      .from('users')
-      .select('count')
-      .limit(1);
-    
-    if (error) {
-      console.error('測試連線錯誤:', error);
-      
-      if (error.code === '42P01' || (error.message && error.message.includes('relation "users" does not exist'))) {
-        showSetupMessage('連線成功！但表格不存在，請執行上方的 SQL 指令', true);
-      } else if (error.message && error.message.includes('Invalid API key')) {
-        showSetupMessage('API Key 無效！請確認是 anon public key', true);
-      } else {
-        showSetupMessage(`連線失敗：${error.message}`, true);
-      }
-    } else {
-      showSetupMessage('連線成功！資料庫已正確設定', false);
-    }
-  } catch (err) {
-    console.error('測試錯誤:', err);
-    showSetupMessage(`測試失敗：${err.message}`, true);
-  } finally {
-    testBtn.innerHTML = '測試連線';
-    testBtn.disabled = false;
-  }
-}
-
-// 儲存 Supabase 設定
-async function saveSupabaseConfig() {
-  const url = document.getElementById('supabase-url').value.trim();
-  const key = document.getElementById('supabase-key').value.trim();
-  
-  if (!url || !key) {
-    showSetupMessage('請填寫所有欄位', true);
-    return;
-  }
-  
-  localStorage.setItem('supabase_url', url);
-  localStorage.setItem('supabase_key', key);
-  
-  initSupabase(url, key);
-  setupModal.classList.add('hidden');
-  loginPage.classList.remove('hidden');
-}
-
-// 檢查並載入 Supabase 設定
-function checkSupabaseConfig() {
-  const url = localStorage.getItem('supabase_url');
-  const key = localStorage.getItem('supabase_key');
-  
-  if (url && key) {
-    initSupabase(url, key);
-    setupModal.classList.add('hidden');
-    loginPage.classList.remove('hidden');
-    checkAutoLogin();
-  } else {
-    // 檢查是否有預設的 Supabase 設定
-    const defaultUrl = 'YOUR_SUPABASE_URL_HERE';  // 在這裡填入您的 Supabase URL
-    const defaultKey = 'YOUR_SUPABASE_ANON_KEY_HERE';  // 在這裡填入您的 Anon Key
-    
-    if (defaultUrl !== 'YOUR_SUPABASE_URL_HERE' && defaultKey !== 'YOUR_SUPABASE_ANON_KEY_HERE') {
-      // 如果有預設設定，直接使用
-      localStorage.setItem('supabase_url', defaultUrl);
-      localStorage.setItem('supabase_key', defaultKey);
-      initSupabase(defaultUrl, defaultKey);
-      setupModal.classList.add('hidden');
-      loginPage.classList.remove('hidden');
-      checkAutoLogin();
-    } else {
-      // 沒有預設設定，顯示設定畫面
-      setupModal.classList.remove('hidden');
-      loginPage.classList.add('hidden');
-    }
-  }
-}
 
 // 更新同步狀態
 function updateSyncStatus(status) {
@@ -757,7 +537,11 @@ async function register() {
     
     if (checkError) {
       console.error('檢查用戶錯誤:', checkError);
-      showAuthMessage('資料庫錯誤，請確認已執行 SQL 設定', true);
+      if (checkError.message.includes('relation "users" does not exist')) {
+        showAuthMessage('請先在 Supabase 執行建表 SQL', true);
+      } else {
+        showAuthMessage('資料庫連線錯誤', true);
+      }
       return;
     }
     
@@ -841,7 +625,19 @@ async function login() {
       .eq('username', username)
       .eq('password', password);
     
-    if (error || !users || users.length === 0) {
+    if (error) {
+      console.error('登入錯誤:', error);
+      if (error.message.includes('relation "users" does not exist')) {
+        showAuthMessage('請先在 Supabase 執行建表 SQL', true);
+      } else {
+        showAuthMessage('登入失敗', true);
+      }
+      loginBtn.innerHTML = '登入';
+      loginBtn.disabled = false;
+      return;
+    }
+    
+    if (!users || users.length === 0) {
       showAuthMessage('用戶名稱或密碼錯誤', true);
       loginBtn.innerHTML = '登入';
       loginBtn.disabled = false;
@@ -870,7 +666,6 @@ async function login() {
   }
 }
 
-// 其他功能保持不變...
 // 登出功能
 async function logout() {
   await saveUserData();
@@ -1356,14 +1151,13 @@ async function exportAllData() {
 
 // 初始化應用程式
 async function initApp() {
-  checkSupabaseConfig();
+  // 自動登入檢查
+  checkAutoLogin();
   
   // Enter 鍵快捷鍵
   document.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
-      if (!setupModal.classList.contains('hidden')) {
-        // 不做任何事，避免誤按
-      } else if (!loginPage.classList.contains('hidden')) {
+      if (!loginPage.classList.contains('hidden')) {
         if (!document.getElementById('login-form').classList.contains('hidden')) {
           login();
         } else {
