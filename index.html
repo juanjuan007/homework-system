@@ -1054,17 +1054,29 @@ function setupEventListeners() {
       }
       
       const cls = classes.find(c => c.id === activeClassId);
-      cls.tasks.unshift({ 
+      if (!cls) {
+        showStatus('請先選擇班級', true);
+        return;
+      }
+      
+      // 新增作業
+      const newTask = { 
         id: Date.now(), 
         title, 
         numbers: [...selectedNumbers].sort((a, b) => a - b),
         date: new Date().toISOString()
-      });
+      };
+      
+      cls.tasks.unshift(newTask);
+      console.log('新增作業:', newTask);
+      
       titleInput.value = '';
       selectedNumbers.clear();
       render();
-      await saveUserData();
-      showStatus('作業已新增');
+      
+      // 強制立即保存
+      await saveUserData(true);
+      showStatus('作業已新增並同步');
     };
   }
 
