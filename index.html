@@ -305,6 +305,19 @@
     border: none;
     border-radius: 3px;
   }
+  
+  .debug-panel {
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(0,0,0,0.8);
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    max-width: 300px;
+    z-index: 9999;
+  }
 </style>
 </head>
 <body>
@@ -360,6 +373,8 @@
     <hr>
     <button id="sort-new">新 → 舊</button>
     <button id="sort-old">舊 → 新</button>
+    <button onclick="forceSync()" style="float: right; background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 4px;">強制同步</button>
+    <div style="clear: both;"></div>
     <div id="tasks"></div>
     <div id="status-message"></div>
     
@@ -401,20 +416,17 @@
   </div>
 </div>
 
+<!-- 除錯面板 -->
+<div id="debug-panel" class="debug-panel hidden">
+  <div id="debug-info"></div>
+</div>
+
 <script>
 // ====================================
-// ✅ Supabase 設定 - 已配置完成！
+// ✅ Supabase 設定
 // ====================================
 const SUPABASE_URL = 'https://qlehgwrggsrcqtcrokth.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsZWhnd3JnZ3NyY3F0Y3Jva3RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1OTg5NzYsImV4cCI6MjA3MTE3NDk3Nn0.7DJcIJnTtuYy3dE1LcXziHmNvbRU2olOFsu0-lkhBzQ';
-
-// ====================================
-// 如何取得上述資料：
-// 1. 登入 Supabase 
-// 2. 進入您的專案
-// 3. 點擊左側 Settings → API
-// 4. 複製 Project URL 和 anon public key
-// ====================================
 
 // 初始化 Supabase
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -425,7 +437,7 @@ let currentUserId = null;
 let classes = [];
 let activeClassId = null;
 let sortOrder = 'new';
-let deletedTasks = [];  // 新增：記錄已刪除的作業ID
+let deletedTasks = [];
 const selectedNumbers = new Set();
 let editingTaskId = null;
 const editSelectedNumbers = new Set();
@@ -448,6 +460,26 @@ const editNumbersDiv = document.getElementById('edit-numbers');
 const editTitleInput = document.getElementById('edit-title');
 const addClassModal = document.getElementById('add-class-modal');
 const newClassNameInput = document.getElementById('new-class-name');
+
+// 除錯功能
+function debugLog(message, data = null) {
+  console.log(`[DEBUG] ${message}`, data || '');
+  const debugPanel = document.getElementById('debug-panel');
+  const debugInfo = document.getElementById('debug-info');
+  
+  if (debugPanel && debugInfo) {
+    debugPanel.classList.remove('hidden');
+    debugInfo.innerHTML = `
+      <strong>${new Date().toLocaleTimeString()}</strong><br>
+      ${message}<br>
+      ${data ? JSON.stringify(data, null, 2).substring(0, 200) : ''}
+    `;
+    
+    setTimeout(() => {
+      debugPanel.classList.add('hidden');
+    }, 5000);
+  }
+}
 
 // 更新同步狀態
 function updateSyncStatus(status) {
@@ -537,11 +569,7 @@ async function register() {
     
     if (checkError) {
       console.error('檢查用戶錯誤:', checkError);
-      if (checkError.message.includes('relation "users" does not exist')) {
-        showAuthMessage('請先在 Supabase 執行建表 SQL', true);
-      } else {
-        showAuthMessage('資料庫連線錯誤', true);
-      }
+      showAuthMessage('資料庫連線錯誤', true);
       return;
     }
     
@@ -573,7 +601,8 @@ async function register() {
     const initialData = {
       classes: [{ id: Date.now(), name: '班級一', tasks: [] }],
       activeClassId: null,
-      sortOrder: 'new'
+      sortOrder: 'new',
+      deletedTasks: []
     };
     initialData.activeClassId = initialData.classes[0].id;
     
@@ -627,11 +656,7 @@ async function login() {
     
     if (error) {
       console.error('登入錯誤:', error);
-      if (error.message.includes('relation "users" does not exist')) {
-        showAuthMessage('請先在 Supabase 執行建表 SQL', true);
-      } else {
-        showAuthMessage('登入失敗', true);
-      }
+      showAuthMessage('登入失敗', true);
       loginBtn.innerHTML = '登入';
       loginBtn.disabled = false;
       return;
@@ -717,127 +742,40 @@ async function checkAutoLogin() {
   }
 }
 
-// 合併資料（保留所有作業，但更新相同ID的作業內容，處理刪除）
+// 簡化的合併資料功能
 function mergeData(localData, cloudData) {
-  // 建立作業 ID 對照表
-  const taskMap = new Map();
-  const deletedTasks = new Set();
+  debugLog('開始合併資料', {
+    本地班級數: localData?.classes?.length || 0,
+    雲端班級數: cloudData?.classes?.length || 0
+  });
   
-  // 收集已刪除的作業ID
-  if (localData && localData.deletedTasks) {
-    localData.deletedTasks.forEach(id => deletedTasks.add(id));
-  }
-  if (cloudData && cloudData.deletedTasks) {
-    cloudData.deletedTasks.forEach(id => deletedTasks.add(id));
+  // 如果沒有雲端資料，返回本地資料
+  if (!cloudData || !cloudData.classes) {
+    return localData?.classes || [];
   }
   
-  // 先加入雲端的所有作業（排除已刪除的）
-  if (cloudData && cloudData.classes) {
-    cloudData.classes.forEach(cloudClass => {
-      if (cloudClass.tasks) {
-        cloudClass.tasks.forEach(task => {
-          if (!deletedTasks.has(task.id)) {
-            taskMap.set(task.id, {...task});
-          }
-        });
-      }
-    });
+  // 如果沒有本地資料，返回雲端資料
+  if (!localData || !localData.classes) {
+    return cloudData.classes;
   }
   
-  // 再加入本地的所有作業（相同 ID 會覆蓋更新，排除已刪除的）
-  if (localData && localData.classes) {
-    localData.classes.forEach((localClass, classIndex) => {
-      if (localClass.tasks) {
-        localClass.tasks.forEach(task => {
-          if (!deletedTasks.has(task.id)) {
-            // 如果是相同 ID，完全覆蓋（包括缺交記錄）
-            taskMap.set(task.id, {...task});
-          }
-        });
-      }
-    });
-  }
+  // 簡單合併：使用雲端資料為主，僅保留本地新增的資料
+  const mergedClasses = [...cloudData.classes];
   
-  // 合併班級資料
-  const mergedClasses = [];
-  const classMap = new Map();
-  
-  // 先處理雲端班級
-  if (cloudData && cloudData.classes) {
-    cloudData.classes.forEach(cls => {
-      classMap.set(cls.id, {
-        id: cls.id,
-        name: cls.name,
-        tasks: []
-      });
-    });
-  }
-  
-  // 再處理本地班級
-  if (localData && localData.classes) {
-    localData.classes.forEach(cls => {
-      if (!classMap.has(cls.id)) {
-        classMap.set(cls.id, {
-          id: cls.id,
-          name: cls.name,
-          tasks: []
-        });
-      } else {
-        // 更新班級名稱（使用最新的）
-        classMap.get(cls.id).name = cls.name;
-      }
-    });
-  }
-  
-  // 將所有作業分配到對應的班級
-  taskMap.forEach(task => {
-    // 找到作業所屬的班級
-    let targetClassId = null;
-    
-    // 先從本地資料找
-    if (localData && localData.classes) {
-      localData.classes.forEach(cls => {
-        if (cls.tasks && cls.tasks.some(t => t.id === task.id)) {
-          targetClassId = cls.id;
-        }
-      });
-    }
-    
-    // 如果本地沒找到，從雲端找
-    if (!targetClassId && cloudData && cloudData.classes) {
-      cloudData.classes.forEach(cls => {
-        if (cls.tasks && cls.tasks.some(t => t.id === task.id)) {
-          targetClassId = cls.id;
-        }
-      });
-    }
-    
-    // 如果找到班級，加入作業
-    if (targetClassId && classMap.has(targetClassId)) {
-      classMap.get(targetClassId).tasks.push(task);
+  // 檢查本地是否有新的班級
+  localData.classes.forEach(localClass => {
+    const existingClass = mergedClasses.find(c => c.id === localClass.id);
+    if (!existingClass) {
+      mergedClasses.push(localClass);
     }
   });
   
-  // 轉換為陣列並排序作業（新的在前）
-  classMap.forEach(cls => {
-    cls.tasks.sort((a, b) => (b.id || 0) - (a.id || 0));
-    mergedClasses.push(cls);
+  debugLog('合併完成', {
+    合併後班級數: mergedClasses.length,
+    合併後作業總數: mergedClasses.reduce((sum, cls) => sum + (cls.tasks?.length || 0), 0)
   });
   
-  // 排序班級（保持原順序）
-  mergedClasses.sort((a, b) => a.id - b.id);
-  
-  console.log('資料合併結果:', {
-    雲端作業數: cloudData?.classes?.reduce((sum, cls) => sum + (cls.tasks?.length || 0), 0) || 0,
-    本地作業數: localData?.classes?.reduce((sum, cls) => sum + (cls.tasks?.length || 0), 0) || 0,
-    合併後作業數: mergedClasses.reduce((sum, cls) => sum + cls.tasks.length, 0),
-    已刪除作業數: deletedTasks.size
-  });
-  
-  return {
-    classes: mergedClasses,
-    deletedTasks: Array.from(deletedTasks)
-  };
+  return mergedClasses;
 }
 
 // 載入用戶資料
@@ -845,6 +783,7 @@ async function loadUserData() {
   if (!currentUserId) return;
   
   updateSyncStatus('syncing');
+  debugLog('開始載入資料', { userId: currentUserId });
   
   try {
     const { data, error } = await supabase
@@ -856,6 +795,7 @@ async function loadUserData() {
     if (error) {
       if (error.code === 'PGRST116') {
         // 沒有資料，建立初始資料
+        debugLog('沒有雲端資料，建立初始資料');
         if (classes.length === 0) {
           classes = [{ id: Date.now(), name: '班級一', tasks: [] }];
           activeClassId = classes[0].id;
@@ -866,104 +806,62 @@ async function loadUserData() {
         throw error;
       }
     } else if (data && data.data) {
-      // 保存當前本地資料
-      const localData = {
-        classes: classes,
-        activeClassId: activeClassId,
-        sortOrder: sortOrder
-      };
+      debugLog('載入雲端資料成功', data.data);
       
-      // 合併本地和雲端資料
-      const mergedClasses = mergeData(localData, data.data);
-      
-      // 更新資料
-      classes = mergedClasses;
+      // 直接使用雲端資料
+      classes = data.data.classes || [];
+      activeClassId = data.data.activeClassId || (classes[0]?.id || null);
+      sortOrder = data.data.sortOrder || 'new';
+      deletedTasks = data.data.deletedTasks || [];
       
       // 確保 activeClassId 有效
-      if (!classes.find(c => c.id === activeClassId) && classes.length > 0) {
-        activeClassId = classes[0].id;
-      }
-      
-      sortOrder = data.data.sortOrder || sortOrder || 'new';
-      
-      console.log('載入並合併資料完成:', { 
-        班級數: classes.length, 
-        作業總數: classes.reduce((sum, cls) => sum + cls.tasks.length, 0) 
-      });
-      
-      // 如果合併後有新資料，立即保存回雲端
-      const cloudTaskCount = data.data.classes?.reduce((sum, cls) => sum + (cls.tasks?.length || 0), 0) || 0;
-      const mergedTaskCount = classes.reduce((sum, cls) => sum + cls.tasks.length, 0);
-      
-      if (mergedTaskCount > cloudTaskCount) {
-        console.log('發現新增的本地資料，同步到雲端...');
-        await saveUserData();
+      if (activeClassId && !classes.find(c => c.id === activeClassId)) {
+        activeClassId = classes[0]?.id || null;
       }
     }
     
     updateSyncStatus('synced');
+    debugLog('資料載入完成');
   } catch (error) {
     console.error('載入資料錯誤:', error);
+    debugLog('載入失敗', error);
     updateSyncStatus('error');
     showStatus('載入失敗，使用本地資料', true);
   }
 }
 
 // 保存用戶資料
-async function saveUserData(forceSave = false) {
+async function saveUserData() {
   if (!currentUserId) return;
   
-  // 防止太頻繁的保存（除非強制保存）
-  if (!forceSave) {
-    if (window.lastSaveTime && Date.now() - window.lastSaveTime < 2000) {
-      console.log('保存太頻繁，跳過此次');
-      return;
-    }
-  }
-  
-  window.lastSaveTime = Date.now();
   updateSyncStatus('syncing');
+  debugLog('開始保存資料', {
+    班級數: classes.length,
+    作業總數: classes.reduce((sum, cls) => sum + (cls.tasks?.length || 0), 0)
+  });
   
   const userData = {
     classes: classes,
     activeClassId: activeClassId,
-    sortOrder: sortOrder
+    sortOrder: sortOrder,
+    deletedTasks: deletedTasks || []
   };
   
-  // 先保存到本地
-  localStorage.setItem(`homework_local_${currentUserId}`, JSON.stringify(userData));
-  
   try {
-    // 先獲取雲端資料
+    // 檢查是否已有資料
     const { data: existing, error: fetchError } = await supabase
       .from('homework_data')
-      .select('data')
+      .select('id')
       .eq('user_id', currentUserId)
       .single();
     
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      throw fetchError;
-    }
-    
-    // 如果雲端有資料，先合併
-    let dataToSave = userData;
-    if (existing && existing.data) {
-      const mergedClasses = mergeData(userData, existing.data);
-      dataToSave = {
-        classes: mergedClasses,
-        activeClassId: activeClassId,
-        sortOrder: sortOrder
-      };
-    }
-    
-    // 保存合併後的資料
     let saveError;
     if (existing) {
       // 更新現有資料
       const { error } = await supabase
         .from('homework_data')
         .update({
-          data: dataToSave,
+          data: userData,
           updated_at: new Date().toISOString()
         })
         .eq('user_id', currentUserId);
@@ -975,7 +873,7 @@ async function saveUserData(forceSave = false) {
         .from('homework_data')
         .insert([{
           user_id: currentUserId,
-          data: dataToSave,
+          data: userData,
           updated_at: new Date().toISOString()
         }]);
       
@@ -985,19 +883,22 @@ async function saveUserData(forceSave = false) {
     if (saveError) throw saveError;
     
     updateSyncStatus('synced');
-    console.log('資料已保存到雲端:', {
-      班級數: dataToSave.classes.length,
-      作業總數: dataToSave.classes.reduce((sum, cls) => sum + (cls.tasks?.length || 0), 0)
-    });
-    
-    // 成功保存後清除本地快取
-    localStorage.removeItem(`homework_local_${currentUserId}`);
+    debugLog('資料保存成功');
     
   } catch (error) {
     console.error('儲存資料錯誤:', error);
+    debugLog('保存失敗', error);
     updateSyncStatus('error');
-    showStatus('同步失敗，資料已暫存在本地', true);
+    showStatus('同步失敗', true);
   }
+}
+
+// 強制同步功能
+async function forceSync() {
+  showStatus('正在同步...');
+  await loadUserData();
+  render();
+  showStatus('同步完成');
 }
 
 // 顯示主應用程式
@@ -1017,12 +918,12 @@ function showMainApp(isAdmin = false) {
   setupEventListeners();
   render();
   
-  // 降低同步頻率，改為每 60 秒同步一次
+  // 定時同步（每30秒）
   syncInterval = setInterval(async () => {
-    console.log('定時同步中...');
+    debugLog('定時同步');
     await loadUserData();
     render();
-  }, 60000); // 60 秒
+  }, 30000);
 }
 
 // 顯示登入頁面
@@ -1077,6 +978,10 @@ function setupEventListeners() {
         return;
       }
       
+      if (!cls.tasks) {
+        cls.tasks = [];
+      }
+      
       // 新增作業
       const newTask = { 
         id: Date.now(), 
@@ -1086,14 +991,13 @@ function setupEventListeners() {
       };
       
       cls.tasks.unshift(newTask);
-      console.log('新增作業:', newTask);
+      debugLog('新增作業', newTask);
       
       titleInput.value = '';
       selectedNumbers.clear();
       render();
       
-      // 強制立即保存
-      await saveUserData(true);
+      await saveUserData();
       showStatus('作業已新增並同步');
     };
   }
@@ -1211,7 +1115,10 @@ function renderEditNumbers() {
 // 渲染作業列表
 function renderTasks() {
   const cls = classes.find(c => c.id === activeClassId);
-  if (!cls) return;
+  if (!cls || !cls.tasks) {
+    tasksDiv.innerHTML = '<p style="color: #666;">尚無作業記錄</p>';
+    return;
+  }
   
   let tasks = [...cls.tasks];
   if (sortOrder === 'old') tasks.reverse();
@@ -1224,7 +1131,7 @@ function renderTasks() {
     const taskInfo = document.createElement('div');
     taskInfo.innerHTML = `
       <strong>${task.title}</strong>
-      ${task.numbers.length > 0 ? 
+      ${task.numbers && task.numbers.length > 0 ? 
         `<span class="task-numbers"> - 缺交: ${task.numbers.join(', ')}</span>` : 
         '<span style="color: green;"> - 全交</span>'}
     `;
@@ -1261,7 +1168,9 @@ function openEditTask(taskId) {
   editingTaskId = taskId;
   editTitleInput.value = task.title;
   editSelectedNumbers.clear();
-  task.numbers.forEach(n => editSelectedNumbers.add(n));
+  if (task.numbers) {
+    task.numbers.forEach(n => editSelectedNumbers.add(n));
+  }
   
   renderEditNumbers();
   editModal.classList.remove('hidden');
@@ -1277,24 +1186,18 @@ async function saveEditTask() {
   const newTitle = editTitleInput.value.trim();
   const newNumbers = [...editSelectedNumbers].sort((a, b) => a - b);
   
-  // 記錄修改前後的變化
-  console.log('編輯作業:', {
+  debugLog('編輯作業', {
     作業ID: task.id,
     原標題: task.title,
-    新標題: newTitle,
-    原缺交: task.numbers,
-    新缺交: newNumbers
+    新標題: newTitle
   });
   
-  // 更新作業資料（完全覆蓋）
   task.title = newTitle;
   task.numbers = newNumbers;
   task.updatedAt = new Date().toISOString();
   
   renderTasks();
-  
-  // 強制立即保存
-  await saveUserData(true);
+  await saveUserData();
   showStatus('作業已更新並同步');
   
   editModal.classList.add('hidden');
@@ -1318,24 +1221,19 @@ async function deleteTask(taskId) {
   const cls = classes.find(c => c.id === activeClassId);
   const taskToDelete = cls.tasks.find(t => t.id === taskId);
   
-  console.log('刪除作業:', {
+  debugLog('刪除作業', {
     作業ID: taskId,
-    標題: taskToDelete?.title,
-    缺交: taskToDelete?.numbers
+    標題: taskToDelete?.title
   });
   
-  // 從列表中移除作業
   cls.tasks = cls.tasks.filter(t => t.id !== taskId);
   
-  // 加入刪除記錄
   if (!deletedTasks.includes(taskId)) {
     deletedTasks.push(taskId);
   }
   
   renderTasks();
-  
-  // 強制立即保存（包含刪除記錄）
-  await saveUserData(true);
+  await saveUserData();
   showStatus('作業已刪除並同步');
 }
 
@@ -1365,7 +1263,7 @@ async function showAllUsers() {
         .eq('user_id', user.id)
         .single();
       
-      const taskCount = homework?.data?.classes?.reduce((sum, cls) => sum + cls.tasks.length, 0) || 0;
+      const taskCount = homework?.data?.classes?.reduce((sum, cls) => sum + (cls.tasks?.length || 0), 0) || 0;
       const adminTag = user.is_admin ? ' (管理員)' : '';
       html += `<li>${user.username}${adminTag} - ${taskCount} 項作業記錄</li>`;
     }
@@ -1437,15 +1335,16 @@ async function initApp() {
   // 當視窗獲得焦點時同步資料
   window.addEventListener('focus', async () => {
     if (currentUserId) {
+      debugLog('視窗獲得焦點，同步資料');
       await loadUserData();
       render();
     }
   });
   
   // 離開頁面前保存資料
-  window.addEventListener('beforeunload', () => {
+  window.addEventListener('beforeunload', async (e) => {
     if (currentUserId) {
-      saveUserData();
+      await saveUserData();
     }
   });
 }
