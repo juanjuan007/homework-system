@@ -336,6 +336,9 @@
   
   <div id="auth-message"></div>
   
+  <div style="margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 5px; font-size: 12px; color: #666;">
+    💡 提示：這是您的專屬系統，所有資料都儲存在您的 Supabase 中
+  </div>
 </div>
 
 <!-- 主應用程式 -->
@@ -426,6 +429,7 @@ let currentUserId = null;
 let classes = [];
 let activeClassId = null;
 let sortOrder = 'new';
+let deletedTasks = [];  // 新增：記錄已刪除的作業ID
 const selectedNumbers = new Set();
 let editingTaskId = null;
 const editSelectedNumbers = new Set();
@@ -717,29 +721,42 @@ async function checkAutoLogin() {
   }
 }
 
-// 合併資料（保留所有作業，但更新相同ID的作業內容）
+// 合併資料（保留所有作業，但更新相同ID的作業內容，處理刪除）
 function mergeData(localData, cloudData) {
   // 建立作業 ID 對照表
   const taskMap = new Map();
+  const deletedTasks = new Set();
   
-  // 先加入雲端的所有作業
+  // 收集已刪除的作業ID
+  if (localData && localData.deletedTasks) {
+    localData.deletedTasks.forEach(id => deletedTasks.add(id));
+  }
+  if (cloudData && cloudData.deletedTasks) {
+    cloudData.deletedTasks.forEach(id => deletedTasks.add(id));
+  }
+  
+  // 先加入雲端的所有作業（排除已刪除的）
   if (cloudData && cloudData.classes) {
     cloudData.classes.forEach(cloudClass => {
       if (cloudClass.tasks) {
         cloudClass.tasks.forEach(task => {
-          taskMap.set(task.id, {...task});
+          if (!deletedTasks.has(task.id)) {
+            taskMap.set(task.id, {...task});
+          }
         });
       }
     });
   }
   
-  // 再加入本地的所有作業（相同 ID 會覆蓋更新）
+  // 再加入本地的所有作業（相同 ID 會覆蓋更新，排除已刪除的）
   if (localData && localData.classes) {
     localData.classes.forEach((localClass, classIndex) => {
       if (localClass.tasks) {
         localClass.tasks.forEach(task => {
-          // 如果是相同 ID，完全覆蓋（包括缺交記錄）
-          taskMap.set(task.id, {...task});
+          if (!deletedTasks.has(task.id)) {
+            // 如果是相同 ID，完全覆蓋（包括缺交記錄）
+            taskMap.set(task.id, {...task});
+          }
         });
       }
     });
@@ -817,10 +834,14 @@ function mergeData(localData, cloudData) {
   console.log('資料合併結果:', {
     雲端作業數: cloudData?.classes?.reduce((sum, cls) => sum + (cls.tasks?.length || 0), 0) || 0,
     本地作業數: localData?.classes?.reduce((sum, cls) => sum + (cls.tasks?.length || 0), 0) || 0,
-    合併後作業數: mergedClasses.reduce((sum, cls) => sum + cls.tasks.length, 0)
+    合併後作業數: mergedClasses.reduce((sum, cls) => sum + cls.tasks.length, 0),
+    已刪除作業數: deletedTasks.size
   });
   
-  return mergedClasses;
+  return {
+    classes: mergedClasses,
+    deletedTasks: Array.from(deletedTasks)
+  };
 }
 
 // 載入用戶資料
@@ -1307,11 +1328,17 @@ async function deleteTask(taskId) {
     缺交: taskToDelete?.numbers
   });
   
+  // 從列表中移除作業
   cls.tasks = cls.tasks.filter(t => t.id !== taskId);
+  
+  // 加入刪除記錄
+  if (!deletedTasks.includes(taskId)) {
+    deletedTasks.push(taskId);
+  }
   
   renderTasks();
   
-  // 強制立即保存
+  // 強制立即保存（包含刪除記錄）
   await saveUserData(true);
   showStatus('作業已刪除並同步');
 }
