@@ -1011,6 +1011,90 @@ function setupEventListeners() {
     };
   }
 }
+// === 渲染畫面 ===
+function render() {
+    const taskList = document.getElementById('task-list');
+    taskList.innerHTML = '';
+
+    if (!currentUser) {
+        taskList.innerHTML = '<p class="text-gray-500">請先登入</p>';
+        return;
+    }
+
+    const myTasks = tasks.filter(t => t.user === currentUser);
+
+    if (myTasks.length === 0) {
+        taskList.innerHTML = '<p class="text-gray-500">目前沒有作業</p>';
+        return;
+    }
+
+    myTasks.forEach(task => {
+        const div = document.createElement('div');
+        div.className = "bg-white p-3 rounded shadow flex justify-between items-center";
+
+        div.innerHTML = `
+            <div>
+                <p><span class="font-bold">科目：</span>${task.subject}</p>
+                <p><span class="font-bold">內容：</span>${task.content}</p>
+                <p><span class="font-bold">截止：</span>${task.deadline || '未設定'}</p>
+            </div>
+            <div class="flex space-x-2">
+                <button class="bg-yellow-400 text-white px-2 py-1 rounded" onclick="editTask('${task.id}')">編輯</button>
+                <button class="bg-red-500 text-white px-2 py-1 rounded" onclick="deleteTask('${task.id}')">刪除</button>
+            </div>
+        `;
+
+        taskList.appendChild(div);
+    });
+}
+
+// === 新增作業 ===
+function addTask(subject, content, deadline) {
+    if (!currentUser) return;
+
+    const task = {
+        id: Date.now().toString(),
+        user: currentUser,
+        subject,
+        content,
+        deadline
+    };
+
+    tasks.push(task);
+    saveTasks();
+    render();
+}
+
+// === 編輯作業 ===
+function editTask(taskId) {
+    const task = tasks.find(t => t.id === taskId && t.user === currentUser);
+    if (!task) return;
+
+    const newSubject = prompt("修改科目：", task.subject);
+    if (newSubject === null) return;
+
+    const newContent = prompt("修改內容：", task.content);
+    if (newContent === null) return;
+
+    const newDeadline = prompt("修改截止日期 (YYYY-MM-DD)：", task.deadline);
+    if (newDeadline === null) return;
+
+    task.subject = newSubject;
+    task.content = newContent;
+    task.deadline = newDeadline;
+
+    saveTasks();
+    render();
+}
+
+// === 刪除作業 ===
+function deleteTask(taskId) {
+    if (!confirm("確定要刪除這個作業嗎？")) return;
+
+    tasks = tasks.filter(t => !(t.id === taskId && t.user === currentUser));
+    saveTasks();
+    render();
+}
 
 // 開啟新增班級彈出窗
 function openAddClassModal() {
